@@ -5,5 +5,9 @@ description = "Curated ComfyUI nodes for prompts, sampling, images, video and au
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
 
+[project.urls]
+Repository = "https://github.com/OnekoSL/Oneko_ComfyUI_Nodes"
+Issues = "https://github.com/OnekoSL/Oneko_ComfyUI_Nodes/issues"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

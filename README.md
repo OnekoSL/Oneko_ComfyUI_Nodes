@@ -22,10 +22,10 @@ Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung.
 
 ## Installation
 
-Das Repository ist zunächst eigenständig lokal angelegt. Für die Verwendung muss es als `ComfyUI/custom_nodes/Oneko_ComfyUI_Nodes` verfügbar sein. Aus dem Ordner `ComfyUI/custom_nodes` kann eine separate lokale Installation erstellt werden:
+Aus dem Ordner `ComfyUI/custom_nodes` installieren:
 
 ```powershell
-git clone "PFAD_ZUM_LOKALEN_ONEKO_REPOSITORY" Oneko_ComfyUI_Nodes
+git clone https://github.com/OnekoSL/Oneko_ComfyUI_Nodes.git
 ```
 
 Die Abhängigkeiten mit **derselben Python-Umgebung wie ComfyUI** installieren, sofern sie dort fehlen:
@@ -34,7 +34,7 @@ Die Abhängigkeiten mit **derselben Python-Umgebung wie ComfyUI** installieren, 
 python -m pip install -r Oneko_ComfyUI_Nodes/requirements.txt
 ```
 
-Danach ComfyUI neu starten. Die Nodes erscheinen unter `Oneko/01 Loaders` bis `Oneko/10 Utilities`. Die Erstellung dieses Repositorys hat die laufende Installation nicht umgestellt. Oneko veröffentlicht keine alten Nukun-IDs als Aliase; beide Pakete können getrennt installiert bleiben, während Workflows migriert werden.
+Danach ComfyUI neu starten. Die Nodes erscheinen unter `Oneko/01 Loaders` bis `Oneko/10 Utilities`. Oneko veröffentlicht keine alten Nukun-IDs als Aliase; beide Pakete können getrennt installiert bleiben, während Workflows migriert werden.
 
 ## Voraussetzungen je Funktion
 
@@ -73,4 +73,4 @@ Die Python-Tests blockieren reale Ollama-HTTP-Anfragen und verwenden gezielte Te
 
 ## Herkunft und Lizenz
 
-MIT-Lizenz, Copyright 2026 OnekoSL. Die Ursprungslizenz bleibt erhalten. Ausgangspunkt: `OnekoSL/Nukun_ComfyUI_Nodes`, Commit `ad75f39c7759910ea00e089a8c9e3e0756e88343`; der Ausgangscheckout war bei der Übernahme unverändert. Ausgewählte Quelldateien, Ressourcen und passende Tests wurden übernommen. Drittpakete werden als externe Abhängigkeiten behandelt. Dieses lokale Repository wurde noch nicht auf GitHub oder in einer Node-Registry veröffentlicht.
+MIT-Lizenz, Copyright 2026 OnekoSL. Die Ursprungslizenz bleibt erhalten. Ausgangspunkt: [OnekoSL/Nukun_ComfyUI_Nodes](https://github.com/OnekoSL/Nukun_ComfyUI_Nodes), Commit `ad75f39c7759910ea00e089a8c9e3e0756e88343`; der Ausgangscheckout war bei der Übernahme unverändert. Ausgewählte Quelldateien, Ressourcen und passende Tests wurden übernommen. Drittpakete werden als externe Abhängigkeiten behandelt. Eine Veröffentlichung in der ComfyUI-Node-Registry steht noch aus.
