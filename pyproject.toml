@@ -1,0 +1,9 @@
+[project]
+name = "oneko-comfyui-nodes"
+version = "0.1.0"
+description = "Curated ComfyUI nodes for prompts, sampling, images, video and audio."
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

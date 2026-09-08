@@ -1,0 +1,212 @@
+{
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "OnekoWan22FrameSequenceAssembler",
+      "pos": [
+        -240,
+        -120
+      ],
+      "size": [
+        500,
+        310
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "run_id",
+          "name": "run_id",
+          "type": "STRING",
+          "widget": {
+            "name": "run_id"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fps",
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "filename",
+          "name": "filename",
+          "type": "STRING",
+          "widget": {
+            "name": "filename"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "codec",
+          "name": "codec",
+          "type": "COMBO",
+          "widget": {
+            "name": "codec"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "quality",
+          "name": "quality",
+          "type": "INT",
+          "widget": {
+            "name": "quality"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "overwrite",
+          "name": "overwrite",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "overwrite"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "video_path",
+          "name": "video_path",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "total_frames",
+          "name": "total_frames",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "localized_name": "duration",
+          "name": "duration",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "localized_name": "manifest_json",
+          "name": "manifest_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "report",
+          "name": "report",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "Frames ? finales MP4",
+      "properties": {
+        "aux_id": "OnekoSL/Oneko_ComfyUI_Nodes",
+        "Node name for S&R": "OnekoWan22FrameSequenceAssembler",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "wan_run_001",
+        16,
+        "final",
+        "libx264",
+        8,
+        true
+      ]
+    },
+    {
+      "id": 2,
+      "type": "PreviewAny",
+      "pos": [
+        340,
+        -90
+      ],
+      "size": [
+        300,
+        160
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "source",
+          "name": "source",
+          "type": "*",
+          "link": 1
+        }
+      ],
+      "outputs": [],
+      "title": "Assemble Bericht",
+      "properties": {
+        "Node name for S&R": "PreviewAny",
+        "aux_id": "rgthree-comfy",
+        "ue_properties": {
+          "version": "7.8",
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 3,
+      "type": "Note",
+      "pos": [
+        -240,
+        260
+      ],
+      "size": [
+        720,
+        260
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "Bedienung ? Assemble",
+      "properties": {},
+      "widgets_values": [
+        "Wenn genug Segmente im Run-Ordner liegen, diesen Workflow queuen.\n\nEr pr?ft frames/frame_000000.png ... ohne L?cken und schreibt output/wan_runs/<run_id>/videos/<filename>.mp4.\n\nKein externer ffmpeg-PATH n?tig: die Node nutzt das lokal installierte imageio_ffmpeg-Bundle."
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      4,
+      2,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

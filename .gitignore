@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.venv/
+venv/
+env/
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+*.log
+*.tmp
+
+# Keep generated ComfyUI assets out of the node repository.
+input/
+output/
+temp/
+models/
+checkpoints/
+loras/
+vae/
