@@ -1,6 +1,6 @@
 # Oneko ComfyUI Nodes
 
-Eine kuratierte Sammlung von **40 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und ACE-Audio. Version **0.1.0**.
+Eine kuratierte Sammlung von **43 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Basisversion **0.1.0**, ergänzt um zwei modulare Audio-Nodes und den Ollama Verse Maker im aktuellen Entwicklungsstand.
 
 Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung. Registrierung, Anzeigenamen, Menüs, Frontend-Erweiterungen und Ollama-Route verwenden Oneko. Das Paket enthält seine Implementierungen selbst und importiert das alte Nukun-Paket nicht.
 
@@ -15,7 +15,7 @@ Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung.
 | Sampling | 4 | Universal KSampler, zwei Guider-Varianten und Noise Profile Cycler |
 | Bilder und Upscaling | 3 | Rekursiver Loader, USDU HiResFix, Pixel Anchored Remaster |
 | Wan 2.2 Video | 9 | Einstellungen, TI2V-Latent, Fortsetzung, Manifeste, Segmente und Zusammenbau |
-| Audio | 3 | ACE Song Director, Timeline Conditioning und Fünfspur-Mixer |
+| Audio | 6 | Ollama Verse Maker, ACE Song Director, Timeline Conditioning, Fünfspur-Mixer und modularer Mixer mit gebündelten Spuren und eingebauten Masterreglern |
 | Model Patch / Hilfsmittel | 2 | UNet Block Noise Patch, Integer-/String-Zähler |
 
 [Vollständiger Node-Katalog](docs/NODE_KATALOG.md) · [Auswahl und Ausschlüsse](docs/AUSWAHL.md) · [Migration](docs/MIGRATION.md) · [Roadmap](ROADMAP.md)
@@ -38,7 +38,7 @@ Danach ComfyUI neu starten. Die Nodes erscheinen unter `Oneko/01 Loaders` bis `O
 
 ## Voraussetzungen je Funktion
 
-- **Basis:** eine aktuelle kompatible ComfyUI-Installation mit ihren eigenen Torch-, Torchaudio-, NumPy- und Pillow-Abhängigkeiten. Als Entwicklungsbasis wurde ComfyUI 0.34.2 mit Python 3.12.10 verwendet; andere Versionsstände sind noch nicht geprüft.
+- **Basis:** eine aktuelle kompatible ComfyUI-Installation mit ihren eigenen Torch-, Torchaudio-, NumPy- und Pillow-Abhängigkeiten. Die modularen Audio-Nodes verwenden die V3-/Autogrow-API; geprüft mit ComfyUI **0.36.0**, Frontend **1.52.7** und Python 3.12.10.
 - **Ollama:** ein erreichbarer Ollama-Dienst und selbst gewählte installierte Text-/Vision-Modelle. Default-URL: `http://127.0.0.1:11434`. Das Paket lädt keine Modelle automatisch herunter. Modelllisten werden über `/oneko/ollama/models` bereitgestellt.
 - **HiResFix Tiled:** benötigt das aktive Originalpaket `ComfyUI_UltimateSDUpscale` mit `UltimateSDUpscaleNoUpscale`. Der H3-Fork ist dafür nicht erforderlich.
 - **Wan-Video:** passende Wan-2.2-TI2V-5B-Modelle und VAE. Segmentzusammenbau benötigt ComfyUIs vorhandene Video-/PyAV-Funktionen und einen unterstützten Codec.
@@ -59,6 +59,14 @@ Modelle, LoRAs, Ausgaben und eigene Workflows gehören in die ComfyUI-Verzeichni
 Die beiden bisher vorhandenen globalen Eingriffe des USDU-Noise-Wrappers und des Preview-Overrides wurden nicht als gelöst ausgegeben. Ihre gezielte Ablösung steht in der Roadmap. GPU-Bildqualität, reale Ollama-Ausgaben und vollständige Video-/Musikgenerierung benötigen zusätzlich Modelltests.
 
 ## Beispiele und Entwicklung
+
+### Modularer Audio Timeline Mixer
+
+Unter `Oneko/08 Audio/Mix` stehen `Audio Track Settings` und `Audio Timeline Mixer` bereit. Audio zuerst an die Spur-Node anschließen, deren `track`-Ausgang dann an `track_1` des Mixers. Weitere Eingänge erscheinen automatisch; bis zu 100 Spuren sind möglich. Ein Trennen von Spur 2 verschiebt Spur 3 nicht. Die Ausgänge bleiben `audio`, `duration_sec` und `report`.
+
+Die Spur-Node bündelt das unveränderte Audio mit Gain (dB), Startzeit (Sekunden), Mute und Fades (Millisekunden). Defaults: 0 dB, Startzeit 0, Mute aus und je 5 ms Fade. Ein mehrfach angeschlossenes Spurpaket wird mehrfach gemischt. Direkt im Mixer stehen die sechs Masterregler: Gesamtlautstärke −3 dB, Samplerate `first_active`, Kanäle `auto`, Pegelschutz `reduce_peak`, Obergrenze −1 dB und maximale Dauer 600 Sekunden. Ohne aktive Audiospur gibt es eine Fehlermeldung.
+
+[Beispielworkflow](examples/oneko_audio_timeline_modular.json) und [Umstieg vom Fünfspur-Mixer](docs/MIGRATION.md#modularer-audio-timeline-mixer). Die bisherigen Mixer bleiben unverändert verfügbar. Nach Installation oder Aktualisierung ComfyUI neu starten und die Browserseite neu laden.
 
 [Beispiele](examples/README.md) verwenden Oneko-IDs. Modellnamen in den Bildvorlagen sind Platzhalter und müssen durch lokal installierte Modelle ersetzt werden.
 

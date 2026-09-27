@@ -27,6 +27,20 @@ def anima_result(foreground, background, word_salad="archivist crystal workshop 
 
 
 class AnimaNaturalPromptTests(unittest.TestCase):
+    def test_background_candidates_do_not_turn_word_fragments_into_rooms(self):
+        for source in ("botanist beside a greenhouse", "mushrooms", "warehouse"):
+            with self.subTest(source=source):
+                candidates = refiner._candidate_data("anima", source, "")
+                self.assertNotIn("sofa", candidates["background_candidates"])
+                self.assertNotIn("curtains", candidates["background_candidates"])
+
+    def test_expansions_still_recognize_real_words_and_separated_tags(self):
+        for source in ("living_room", "living-room", "living room", "house"):
+            with self.subTest(source=source):
+                self.assertIn("sofa", refiner._tag_profile_background_preset_tags([source]))
+        self.assertNotIn("lion_focus", refiner._expand_tags_from_terms(["dandelion"], refiner.FOREGROUND_EXPANSIONS))
+        self.assertIn("lion_focus", refiner._expand_tags_from_terms(["a lion"], refiner.FOREGROUND_EXPANSIONS))
+
     def test_natural_prompt_starts_with_quality_tags_and_fits_target_length(self):
         result = anima_result(
             "A silver-haired archivist opens a sealed book beside a quiet brass machine. "

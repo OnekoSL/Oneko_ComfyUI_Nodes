@@ -105,6 +105,33 @@ class PromptModeTests(unittest.TestCase):
         creative = refiner.OnekoOllamaPromptRefiner.IS_CHANGED(**refine_kwargs("creative"))
         self.assertNotEqual(strict, creative)
 
+    def test_retries_keep_mode_profile_and_complete_fixed_inputs(self):
+        source = "red dragon mountain valley " + " ".join(f"detail{i}" for i in range(30))
+        source += " exactly three silver bells"
+        anchor = "watercolor <lora:dragon:0.8>"
+        valid = json.dumps({
+            "base_prompt": "watercolor",
+            "foreground_prompt": "A red dragon carries exactly three silver bells through the valley.",
+            "background_prompt": "Distant mountains frame the green valley in soft evening light.",
+            "negative": "bad anatomy",
+            "report": "Preserved the dragon and bells.",
+        })
+        for mode in ("strict", "creative"):
+            with self.subTest(mode=mode), mock.patch.object(
+                refiner, "_request_ollama", side_effect=["bad", "still bad", valid]
+            ) as request:
+                result = refiner.OnekoOllamaPromptRefiner()._refine_single(
+                    source, "url", "test-model", "anima", 10, 0.8, 0.95,
+                    430, 30, 16384, anchor, prompt_mode=mode,
+                )
+            self.assertIn("three silver bells", result[0])
+            self.assertEqual(request.call_count, 3)
+            for call in request.call_args_list[1:]:
+                self.assertIn(source, call.args[2])
+                self.assertIn(anchor, call.args[2])
+                self.assertIn("Anima", call.args[2])
+                self.assertIn(f"{mode.title()} mode", call.kwargs["system_instructions"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,620 @@
+{
+  "id": "50367bd7-506f-40e9-b8ac-bc765ef34785",
+  "revision": 0,
+  "last_node_id": 7,
+  "last_link_id": 5,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "EmptyAudio",
+      "pos": [
+        60,
+        100
+      ],
+      "size": [
+        300,
+        130
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "duration",
+          "name": "duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sample_rate",
+          "name": "sample_rate",
+          "type": "INT",
+          "widget": {
+            "name": "sample_rate"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "channels",
+          "name": "channels",
+          "type": "INT",
+          "widget": {
+            "name": "channels"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "title": "Demo-Audio 1 (Stille)",
+      "properties": {
+        "Node name for S&R": "EmptyAudio"
+      },
+      "widgets_values": [
+        3,
+        44100,
+        2
+      ],
+      "widgets_values_named": {
+        "duration": 3,
+        "sample_rate": 44100,
+        "channels": 2
+      }
+    },
+    {
+      "id": 2,
+      "type": "EmptyAudio",
+      "pos": [
+        60,
+        350
+      ],
+      "size": [
+        300,
+        130
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "duration",
+          "name": "duration",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sample_rate",
+          "name": "sample_rate",
+          "type": "INT",
+          "widget": {
+            "name": "sample_rate"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "channels",
+          "name": "channels",
+          "type": "INT",
+          "widget": {
+            "name": "channels"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "AUDIO",
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "title": "Demo-Audio 2 (Stille)",
+      "properties": {
+        "Node name for S&R": "EmptyAudio"
+      },
+      "widgets_values": [
+        2,
+        44100,
+        2
+      ],
+      "widgets_values_named": {
+        "duration": 2,
+        "sample_rate": 44100,
+        "channels": 2
+      }
+    },
+    {
+      "id": 3,
+      "type": "OnekoAudioTrackSettings",
+      "pos": [
+        400,
+        100
+      ],
+      "size": [
+        300,
+        154
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 1
+        },
+        {
+          "localized_name": "gain_db",
+          "name": "gain_db",
+          "type": "FLOAT",
+          "widget": {
+            "name": "gain_db"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "offset_sec",
+          "name": "offset_sec",
+          "type": "FLOAT",
+          "widget": {
+            "name": "offset_sec"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "mute",
+          "name": "mute",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "mute"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fade_in_ms",
+          "name": "fade_in_ms",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fade_in_ms"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fade_out_ms",
+          "name": "fade_out_ms",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fade_out_ms"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "track",
+          "name": "track",
+          "type": "ONEKO_AUDIO_TRACK",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "title": "Spur 1: Einstellungen",
+      "properties": {
+        "Node name for S&R": "OnekoAudioTrackSettings"
+      },
+      "widgets_values": [
+        0,
+        0,
+        false,
+        5,
+        5
+      ],
+      "widgets_values_named": {
+        "gain_db": 0,
+        "offset_sec": 0,
+        "mute": false,
+        "fade_in_ms": 5,
+        "fade_out_ms": 5
+      }
+    },
+    {
+      "id": 4,
+      "type": "OnekoAudioTrackSettings",
+      "pos": [
+        400,
+        350
+      ],
+      "size": [
+        300,
+        154
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3
+        },
+        {
+          "localized_name": "gain_db",
+          "name": "gain_db",
+          "type": "FLOAT",
+          "widget": {
+            "name": "gain_db"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "offset_sec",
+          "name": "offset_sec",
+          "type": "FLOAT",
+          "widget": {
+            "name": "offset_sec"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "mute",
+          "name": "mute",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "mute"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fade_in_ms",
+          "name": "fade_in_ms",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fade_in_ms"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fade_out_ms",
+          "name": "fade_out_ms",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fade_out_ms"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "track",
+          "name": "track",
+          "type": "ONEKO_AUDIO_TRACK",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "title": "Spur 2: Einstellungen",
+      "properties": {
+        "Node name for S&R": "OnekoAudioTrackSettings"
+      },
+      "widgets_values": [
+        -6,
+        1,
+        false,
+        5,
+        5
+      ],
+      "widgets_values_named": {
+        "gain_db": -6,
+        "offset_sec": 1,
+        "mute": false,
+        "fade_in_ms": 5,
+        "fade_out_ms": 5
+      }
+    },
+    {
+      "id": 5,
+      "type": "OnekoAudioTimelineMixer",
+      "pos": [
+        760,
+        100
+      ],
+      "size": [
+        320,
+        218
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "master_gain_db",
+          "name": "master_gain_db",
+          "type": "FLOAT",
+          "widget": {
+            "name": "master_gain_db"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sample_rate_mode",
+          "name": "sample_rate_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "sample_rate_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "channel_mode",
+          "name": "channel_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "channel_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "peak_mode",
+          "name": "peak_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "peak_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "peak_ceiling_db",
+          "name": "peak_ceiling_db",
+          "type": "FLOAT",
+          "widget": {
+            "name": "peak_ceiling_db"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "maximum_duration_sec",
+          "name": "maximum_duration_sec",
+          "type": "FLOAT",
+          "widget": {
+            "name": "maximum_duration_sec"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "track_1",
+          "name": "tracks.track_1",
+          "shape": 7,
+          "type": "ONEKO_AUDIO_TRACK",
+          "link": 2
+        },
+        {
+          "label": "track_2",
+          "localized_name": "track_2",
+          "name": "tracks.track_2",
+          "shape": 7,
+          "type": "ONEKO_AUDIO_TRACK",
+          "link": 4
+        },
+        {
+          "label": "track_3",
+          "localized_name": "track_3",
+          "name": "tracks.track_3",
+          "shape": 7,
+          "type": "ONEKO_AUDIO_TRACK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            5
+          ]
+        },
+        {
+          "localized_name": "duration_sec",
+          "name": "duration_sec",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "localized_name": "report",
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "OnekoAudioTimelineMixer"
+      },
+      "widgets_values": [
+        -3,
+        "first_active",
+        "auto",
+        "reduce_peak",
+        -1,
+        600
+      ],
+      "widgets_values_named": {
+        "master_gain_db": -3,
+        "sample_rate_mode": "first_active",
+        "channel_mode": "auto",
+        "peak_mode": "reduce_peak",
+        "peak_ceiling_db": -1,
+        "maximum_duration_sec": 600
+      }
+    },
+    {
+      "id": 6,
+      "type": "SaveAudioAdvanced",
+      "pos": [
+        1120,
+        100
+      ],
+      "size": [
+        300,
+        136
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 5
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "format",
+          "name": "format",
+          "type": "COMFY_DYNAMICCOMBO_V3",
+          "widget": {
+            "name": "format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null
+        }
+      ],
+      "title": "Ergebnis als FLAC",
+      "properties": {},
+      "widgets_values": [
+        "audio/Oneko_Timeline/Beispiel",
+        "flac"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "audio/Oneko_Timeline/Beispiel",
+        "format": "flac"
+      }
+    },
+    {
+      "id": 7,
+      "type": "Note",
+      "pos": [
+        60,
+        630
+      ],
+      "size": [
+        650,
+        230
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "So verwendest du den modularen Mixer",
+      "properties": {},
+      "widgets_values": [
+        "Die zwei Demo-Quellen erzeugen Stille: sofort ohne Modelle oder Dateien testbar.\nFür hörbare Inhalte durch Load Audio oder Audio-Generatoren ersetzen.\n\nAudio zuerst an die Spur-Node anschließen; deren track-Ausgang an den Mixer. Weitere Eingänge erscheinen automatisch. Lücken behalten ihre Nummern.\n\nGain: dB · Offset: Sekunden · Fades: Millisekunden.\nAlle Masterregler stehen direkt im Mixer. Eine mehrfach angeschlossene Spur wird mehrfach gemischt.\nAusgabe: ComfyUI/output/audio/Oneko_Timeline/Beispiel_....flac"
+      ],
+      "widgets_values_named": {
+        "text": "Die zwei Demo-Quellen erzeugen Stille: sofort ohne Modelle oder Dateien testbar.\nFür hörbare Inhalte durch Load Audio oder Audio-Generatoren ersetzen.\n\nAudio zuerst an die Spur-Node anschließen; deren track-Ausgang an den Mixer. Weitere Eingänge erscheinen automatisch. Lücken behalten ihre Nummern.\n\nGain: dB · Offset: Sekunden · Fades: Millisekunden.\nAlle Masterregler stehen direkt im Mixer. Eine mehrfach angeschlossene Spur wird mehrfach gemischt.\nAusgabe: ComfyUI/output/audio/Oneko_Timeline/Beispiel_....flac"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "AUDIO"
+    ],
+    [
+      2,
+      3,
+      0,
+      5,
+      6,
+      "ONEKO_AUDIO_TRACK"
+    ],
+    [
+      3,
+      2,
+      0,
+      4,
+      0,
+      "AUDIO"
+    ],
+    [
+      4,
+      4,
+      0,
+      5,
+      7,
+      "ONEKO_AUDIO_TRACK"
+    ],
+    [
+      5,
+      5,
+      0,
+      6,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.86,
+      "offset": [
+        40,
+        10
+      ]
+    }
+  },
+  "version": 0.4
+}

@@ -3,6 +3,11 @@ import { api } from "../../../scripts/api.js";
 
 const TARGET_NODES = [
     {
+        className: "OnekoOllamaVerseMaker",
+        displayName: "Ollama Verse Maker (Oneko)",
+        fallbackModel: "autoren-darkidol-llama-3-1-8b:latest",
+    },
+    {
         className: "OnekoOllamaPromptRefiner",
         displayName: "Ollama Prompt Refiner (Oneko)",
         fallbackModel: "autoren-darkidol-llama-3-1-8b:latest",

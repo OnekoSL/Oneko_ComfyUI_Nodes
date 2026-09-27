@@ -1,6 +1,6 @@
 # Node-Katalog: Oneko 0.1.0
 
-40 öffentliche Nodes, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Der Katalog beschreibt die Auswahl; zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
+42 öffentliche Nodes im aktuellen Entwicklungsstand, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
 
 ## Oneko/01 Loaders
 
@@ -114,11 +114,23 @@
 | `OnekoAceSongTimelineConditioning` | [ACE Song Timeline Conditioning (Oneko)](../nodes/ace_song_timeline_conditioning.py) | `CONDITIONING, STRING, STRING, FLOAT` |
 | `OnekoAceSongVariationDirector` | [ACE Song Variation Director (Oneko)](../nodes/ace_song_variation_director.py) | `STRING, STRING, STRING, STRING` |
 
+## Oneko/08 Audio/Lyrics
+
+Für Dauerläufe wird höchstens einmal repariert. Der zweite Versuch liefert wieder ein vollständiges Liedtext-/Stil-Paar und wird bei Qualitätsabweichungen trotzdem weitergegeben, etwa bei fehlenden Pflichtbegriffen oder Abschnittsmarkierungen. Fehlende oder unlesbare Felder werden soweit möglich aus dem ersten Versuch oder den Eingabevorlagen ergänzt. Bleibt kein Text verfügbar, werden leere Strings statt eines weiteren Validierungsfehlers zurückgegeben. Eine Warnung steht im `report` und im Log. Ein Verbindungsfehler vor der ersten Antwort bleibt ein Fehler; scheitert erst der Reparaturaufruf, werden die verfügbaren Texte weitergereicht.
+
+| ID | Anzeigename / Implementierung | Ausgänge |
+|---|---|---|
+| `OnekoOllamaVerseMaker` | [Ollama Verse Maker (Oneko)](../nodes/ollama_verse_maker.py) | `STRING lyrics, STRING style, STRING report` |
+
+Schreibt neue Lieder oder überarbeitet Ausgangstexte und erzeugt dabei den passenden englischen Musikstil. Strukturregler bestimmen Strophen und Zeilen sowie Refrain und Outro. Ausdrücklich abweichende Angaben in `special_requests` haben Vorrang; die Sprach- und Qualitätsvorgaben werden dem Modell mitgegeben und sind keine Garantie für Metrik oder musikalische Qualität. `must_keep` enthält pro Zeile eine im gesungenen Text exakt zu erhaltende Formulierung. Standardmäßig deutsche Lyrics, vier vierzeilige Strophen, identischer vierzeiliger Refrain nach jeder Strophe und vierzeiliges Outro. Stil und Text gehen getrennt an die Musik-Nodes; `report` ist nur zur Anzeige bestimmt. Ungültige Antworten werden einmal repariert, danach greift die oben beschriebene Weitergabe für Dauerläufe. Modellfreigabe erfolgt standardmäßig auch bei Fehlern. Gleiche Eingaben und Seeds nutzen ComfyUIs Cache; neue Varianten über einen neuen Seed anfordern.
+
 ## Oneko/08 Audio/Mix
 
 | Node-ID | Anzeigename | Ausgänge |
 |---|---|---|
 | `OnekoAudioTimelineMixer5` | [Audio Timeline Mixer 5 (Oneko)](../nodes/audio_timeline_mixer.py) | `AUDIO, FLOAT, STRING` |
+| `OnekoAudioTrackSettings` | [Audio Track Settings (Oneko)](../nodes/audio_timeline_modular.py) | `ONEKO_AUDIO_TRACK` |
+| `OnekoAudioTimelineMixer` | [Audio Timeline Mixer (Oneko)](../nodes/audio_timeline_modular.py) | `AUDIO, FLOAT, STRING` |
 
 ## Oneko/09 Model Patches
 

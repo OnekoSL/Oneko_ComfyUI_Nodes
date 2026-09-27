@@ -138,6 +138,23 @@ class LanguageNormalizationTests(unittest.TestCase):
         self.assertEqual(request.call_args_list[1].args[3], 10)
         self.assertIn("Invalid response:\nnot json", request.call_args_list[1].args[2])
 
+    def test_long_source_gets_room_for_all_fields_on_both_attempts(self):
+        source = refiner._language_source_values(
+            "A red dragon rests beside an old stone tower. " * 35,
+            "Three blue lanterns hang from a wooden gate. " * 10,
+        )
+        response = json.dumps(source)
+        with mock.patch.object(refiner, "_request_ollama", side_effect=["bad", response]) as request:
+            values, _, translated = refiner._prepare_language_inputs(
+                *source.values(), "url", "model", 9, 30, 16384
+            )
+
+        self.assertEqual(values, source)
+        self.assertFalse(translated)
+        budgets = [call.kwargs["num_predict"] for call in request.call_args_list]
+        self.assertGreater(budgets[0], len(response.split()))
+        self.assertEqual(budgets[0], budgets[1])
+
     def test_changed_quoted_text_triggers_one_protected_token_repair(self):
         source = 'roter Drache vor einem Schild "Gr??e"'
         invalid = language_response('red dragon in front of a sign "Greetings"')

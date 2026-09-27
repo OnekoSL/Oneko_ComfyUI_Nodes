@@ -172,169 +172,194 @@ class OnekoAudioTimelineMixer5:
         maximum_duration_sec,
         **kwargs,
     ):
-        if channel_mode not in CHANNEL_MODES:
-            raise ValueError(f"unknown channel_mode: {channel_mode}")
-        if peak_mode not in PEAK_MODES:
-            raise ValueError(f"unknown peak_mode: {peak_mode}")
-
-        master_gain_db = _validate_number(master_gain_db, "master_gain_db")
-        peak_ceiling_db = _validate_number(peak_ceiling_db, "peak_ceiling_db")
-        maximum_duration_sec = _validate_number(
-            maximum_duration_sec,
-            "maximum_duration_sec",
-            minimum=0.0,
-        )
-        if maximum_duration_sec == 0.0:
-            raise ValueError("maximum_duration_sec must be greater than zero")
-
-        tracks = []
-        warnings = []
-        for index in range(1, CHANNEL_COUNT + 1):
-            if bool(kwargs.get(f"mute_{index}", False)):
-                continue
-            audio = kwargs.get(f"audio_{index}")
-            if audio is None:
-                continue
-            waveform, sample_rate = _validate_audio(audio, index)
-            if waveform.shape[-1] == 0:
-                warnings.append(f"audio_{index} ignored because it contains no samples")
-                continue
-            tracks.append(
-                {
-                    "index": index,
-                    "waveform": waveform,
-                    "sample_rate": sample_rate,
-                    "gain_db": _validate_number(kwargs.get(f"gain_db_{index}", 0.0), f"gain_db_{index}"),
-                    "offset_sec": _validate_number(
-                        kwargs.get(f"offset_sec_{index}", 0.0),
-                        f"offset_sec_{index}",
-                        minimum=0.0,
-                    ),
-                    "fade_in_ms": _validate_number(
-                        kwargs.get(f"fade_in_ms_{index}", 5.0),
-                        f"fade_in_ms_{index}",
-                        minimum=0.0,
-                    ),
-                    "fade_out_ms": _validate_number(
-                        kwargs.get(f"fade_out_ms_{index}", 5.0),
-                        f"fade_out_ms_{index}",
-                        minimum=0.0,
-                    ),
-                }
-            )
-
-        if not tracks:
-            message = "Audio Timeline Mixer requires at least one active, non-empty audio input"
-            if warnings:
-                message += ": " + "; ".join(warnings)
-            raise ValueError(message)
-
-        target_sample_rate = _target_sample_rate(tracks, sample_rate_mode)
-        target_batch = max(track["waveform"].shape[0] for track in tracks)
-        target_channels = 2 if channel_mode == "force_stereo" else max(
-            track["waveform"].shape[1] for track in tracks
-        )
-        target_device = tracks[0]["waveform"].device
-        target_dtype = tracks[0]["waveform"].dtype
-
-        for track in tracks:
-            batch_size = track["waveform"].shape[0]
-            if batch_size not in (1, target_batch):
-                raise ValueError(
-                    f"audio_{track['index']} batch size {batch_size} is incompatible with target batch size {target_batch}"
-                )
-
-        prepared = []
-        total_length = 0
-        track_reports = []
-        maximum_samples = _round_samples(maximum_duration_sec, target_sample_rate)
-        for track in tracks:
-            waveform = track["waveform"].to(device=target_device, dtype=target_dtype)
-            changes = []
-            if track["sample_rate"] != target_sample_rate:
-                waveform = torchaudio.functional.resample(
-                    waveform,
-                    track["sample_rate"],
-                    target_sample_rate,
-                )
-                changes.append(f"{track['sample_rate']} -> {target_sample_rate} Hz")
-            if waveform.shape[1] == 1 and target_channels == 2:
-                waveform = waveform.repeat(1, 2, 1)
-                changes.append("mono -> stereo")
-            if waveform.shape[0] == 1 and target_batch > 1:
-                waveform = waveform.expand(target_batch, -1, -1)
-                changes.append(f"batch 1 -> {target_batch}")
-
-            requested_fade_in = _round_samples(track["fade_in_ms"] / 1000.0, target_sample_rate)
-            requested_fade_out = _round_samples(track["fade_out_ms"] / 1000.0, target_sample_rate)
-            waveform, fade_in, fade_out, shortened = _apply_fades(
-                waveform,
-                requested_fade_in,
-                requested_fade_out,
-            )
-            if shortened:
-                warnings.append(f"audio_{track['index']} fades shortened to fit the clip")
-            waveform = waveform * _db_to_amplitude(track["gain_db"])
-            offset = _round_samples(track["offset_sec"], target_sample_rate)
-            end = offset + waveform.shape[-1]
-            if end > maximum_samples:
-                actual_duration = end / target_sample_rate
-                raise ValueError(
-                    f"audio_{track['index']} ends at {actual_duration:.3f}s, exceeding maximum_duration_sec={maximum_duration_sec:g}"
-                )
-            total_length = max(total_length, end)
-            prepared.append((waveform, offset))
-
-            fade_summary = f"fades {1000.0 * fade_in / target_sample_rate:.1f}/{1000.0 * fade_out / target_sample_rate:.1f} ms"
-            if changes:
-                changes.insert(0, fade_summary)
-            else:
-                changes = [fade_summary]
-            track_reports.append(
-                f"audio_{track['index']}: offset {offset / target_sample_rate:.3f}s, "
-                f"gain {track['gain_db']:g} dB, " + ", ".join(changes)
-            )
-
-        mix = torch.zeros(
-            (target_batch, target_channels, total_length),
-            dtype=target_dtype,
-            device=target_device,
-        )
-        for waveform, offset in prepared:
-            mix[..., offset:offset + waveform.shape[-1]] += waveform
-
-        mix = mix * _db_to_amplitude(master_gain_db)
-        peak_before = float(mix.abs().amax().item()) if mix.numel() else 0.0
-        ceiling = _db_to_amplitude(peak_ceiling_db)
-        protection = "not needed"
-        if peak_mode == "reduce_peak" and peak_before > ceiling:
-            reduction = ceiling / peak_before
-            mix = mix * reduction
-            protection = f"reduced by {20.0 * math.log10(reduction):.2f} dB"
-        elif peak_mode == "hard_clip" and peak_before > ceiling:
-            mix = mix.clamp(-ceiling, ceiling)
-            protection = "hard clip applied"
-        elif peak_mode == "none" and peak_before > ceiling:
-            warnings.append(
-                f"output peak {_dbfs(peak_before)} dBFS exceeds ceiling {peak_ceiling_db:g} dBFS"
-            )
-            protection = "disabled"
-        elif peak_mode == "none":
-            protection = "disabled"
-
-        peak_after = float(mix.abs().amax().item()) if mix.numel() else 0.0
-        duration_sec = total_length / target_sample_rate
-        channel_label = "mono" if target_channels == 1 else "stereo"
-        report_lines = [
-            f"Audio Timeline Mixer 5: {len(tracks)} active track(s), {target_sample_rate} Hz, "
-            f"{channel_label}, batch {target_batch}, duration {duration_sec:.3f}s.",
-            f"Peak before/after: {_dbfs(peak_before)}/{_dbfs(peak_after)} dBFS; "
-            f"{peak_mode}: {protection}; ceiling {peak_ceiling_db:g} dBFS.",
-            *track_reports,
+        track_inputs = [
+            {
+                "index": index,
+                "audio": kwargs.get(f"audio_{index}"),
+                **{
+                    field: kwargs[f"{field}_{index}"]
+                    for field in ("gain_db", "offset_sec", "mute", "fade_in_ms", "fade_out_ms")
+                    if f"{field}_{index}" in kwargs
+                },
+            }
+            for index in range(1, CHANNEL_COUNT + 1)
         ]
+        return mix_tracks(
+            track_inputs, master_gain_db, sample_rate_mode, channel_mode,
+            peak_mode, peak_ceiling_db, maximum_duration_sec,
+            report_name="Audio Timeline Mixer 5",
+        )
+
+
+def mix_tracks(
+    track_inputs, master_gain_db, sample_rate_mode, channel_mode,
+    peak_mode, peak_ceiling_db, maximum_duration_sec,
+    report_name="Audio Timeline Mixer", warnings=(),
+):
+    if channel_mode not in CHANNEL_MODES:
+        raise ValueError(f"unknown channel_mode: {channel_mode}")
+    if peak_mode not in PEAK_MODES:
+        raise ValueError(f"unknown peak_mode: {peak_mode}")
+
+    master_gain_db = _validate_number(master_gain_db, "master_gain_db")
+    peak_ceiling_db = _validate_number(peak_ceiling_db, "peak_ceiling_db")
+    maximum_duration_sec = _validate_number(
+        maximum_duration_sec,
+        "maximum_duration_sec",
+        minimum=0.0,
+    )
+    if maximum_duration_sec == 0.0:
+        raise ValueError("maximum_duration_sec must be greater than zero")
+
+    tracks = []
+    warnings = list(warnings)
+    for track_input in track_inputs:
+        index = track_input["index"]
+        if bool(track_input.get("mute", False)):
+            continue
+        audio = track_input.get("audio")
+        if audio is None:
+            continue
+        waveform, sample_rate = _validate_audio(audio, index)
+        if waveform.shape[-1] == 0:
+            warnings.append(f"audio_{index} ignored because it contains no samples")
+            continue
+        tracks.append(
+            {
+                "index": index,
+                "waveform": waveform,
+                "sample_rate": sample_rate,
+                "gain_db": _validate_number(track_input.get("gain_db", 0.0), f"gain_db_{index}"),
+                "offset_sec": _validate_number(
+                    track_input.get("offset_sec", 0.0),
+                    f"offset_sec_{index}",
+                    minimum=0.0,
+                ),
+                "fade_in_ms": _validate_number(
+                    track_input.get("fade_in_ms", 5.0),
+                    f"fade_in_ms_{index}",
+                    minimum=0.0,
+                ),
+                "fade_out_ms": _validate_number(
+                    track_input.get("fade_out_ms", 5.0),
+                    f"fade_out_ms_{index}",
+                    minimum=0.0,
+                ),
+            }
+        )
+
+    if not tracks:
+        message = "Audio Timeline Mixer requires at least one active, non-empty audio input"
         if warnings:
-            report_lines.append("Warnings: " + "; ".join(warnings))
-        return {"waveform": mix, "sample_rate": target_sample_rate}, duration_sec, "\n".join(report_lines)
+            message += ": " + "; ".join(warnings)
+        raise ValueError(message)
+
+    target_sample_rate = _target_sample_rate(tracks, sample_rate_mode)
+    target_batch = max(track["waveform"].shape[0] for track in tracks)
+    target_channels = 2 if channel_mode == "force_stereo" else max(
+        track["waveform"].shape[1] for track in tracks
+    )
+    target_device = tracks[0]["waveform"].device
+    target_dtype = tracks[0]["waveform"].dtype
+
+    for track in tracks:
+        batch_size = track["waveform"].shape[0]
+        if batch_size not in (1, target_batch):
+            raise ValueError(
+                f"audio_{track['index']} batch size {batch_size} is incompatible with target batch size {target_batch}"
+            )
+
+    prepared = []
+    total_length = 0
+    track_reports = []
+    maximum_samples = _round_samples(maximum_duration_sec, target_sample_rate)
+    for track in tracks:
+        waveform = track["waveform"].to(device=target_device, dtype=target_dtype)
+        changes = []
+        if track["sample_rate"] != target_sample_rate:
+            waveform = torchaudio.functional.resample(
+                waveform,
+                track["sample_rate"],
+                target_sample_rate,
+            )
+            changes.append(f"{track['sample_rate']} -> {target_sample_rate} Hz")
+        if waveform.shape[1] == 1 and target_channels == 2:
+            waveform = waveform.repeat(1, 2, 1)
+            changes.append("mono -> stereo")
+        if waveform.shape[0] == 1 and target_batch > 1:
+            waveform = waveform.expand(target_batch, -1, -1)
+            changes.append(f"batch 1 -> {target_batch}")
+
+        requested_fade_in = _round_samples(track["fade_in_ms"] / 1000.0, target_sample_rate)
+        requested_fade_out = _round_samples(track["fade_out_ms"] / 1000.0, target_sample_rate)
+        waveform, fade_in, fade_out, shortened = _apply_fades(
+            waveform,
+            requested_fade_in,
+            requested_fade_out,
+        )
+        if shortened:
+            warnings.append(f"audio_{track['index']} fades shortened to fit the clip")
+        waveform = waveform * _db_to_amplitude(track["gain_db"])
+        offset = _round_samples(track["offset_sec"], target_sample_rate)
+        end = offset + waveform.shape[-1]
+        if end > maximum_samples:
+            actual_duration = end / target_sample_rate
+            raise ValueError(
+                f"audio_{track['index']} ends at {actual_duration:.3f}s, exceeding maximum_duration_sec={maximum_duration_sec:g}"
+            )
+        total_length = max(total_length, end)
+        prepared.append((waveform, offset))
+
+        fade_summary = f"fades {1000.0 * fade_in / target_sample_rate:.1f}/{1000.0 * fade_out / target_sample_rate:.1f} ms"
+        if changes:
+            changes.insert(0, fade_summary)
+        else:
+            changes = [fade_summary]
+        track_reports.append(
+            f"audio_{track['index']}: offset {offset / target_sample_rate:.3f}s, "
+            f"gain {track['gain_db']:g} dB, " + ", ".join(changes)
+        )
+
+    mix = torch.zeros(
+        (target_batch, target_channels, total_length),
+        dtype=target_dtype,
+        device=target_device,
+    )
+    for waveform, offset in prepared:
+        mix[..., offset:offset + waveform.shape[-1]] += waveform
+
+    mix = mix * _db_to_amplitude(master_gain_db)
+    peak_before = float(mix.abs().amax().item()) if mix.numel() else 0.0
+    ceiling = _db_to_amplitude(peak_ceiling_db)
+    protection = "not needed"
+    if peak_mode == "reduce_peak" and peak_before > ceiling:
+        reduction = ceiling / peak_before
+        mix = mix * reduction
+        protection = f"reduced by {20.0 * math.log10(reduction):.2f} dB"
+    elif peak_mode == "hard_clip" and peak_before > ceiling:
+        mix = mix.clamp(-ceiling, ceiling)
+        protection = "hard clip applied"
+    elif peak_mode == "none" and peak_before > ceiling:
+        warnings.append(
+            f"output peak {_dbfs(peak_before)} dBFS exceeds ceiling {peak_ceiling_db:g} dBFS"
+        )
+        protection = "disabled"
+    elif peak_mode == "none":
+        protection = "disabled"
+
+    peak_after = float(mix.abs().amax().item()) if mix.numel() else 0.0
+    duration_sec = total_length / target_sample_rate
+    channel_label = "mono" if target_channels == 1 else "stereo"
+    report_lines = [
+        f"{report_name}: {len(tracks)} active track(s), {target_sample_rate} Hz, "
+        f"{channel_label}, batch {target_batch}, duration {duration_sec:.3f}s.",
+        f"Peak before/after: {_dbfs(peak_before)}/{_dbfs(peak_after)} dBFS; "
+        f"{peak_mode}: {protection}; ceiling {peak_ceiling_db:g} dBFS.",
+        *track_reports,
+    ]
+    if warnings:
+        report_lines.append("Warnings: " + "; ".join(warnings))
+    return {"waveform": mix, "sample_rate": target_sample_rate}, duration_sec, "\n".join(report_lines)
 
 
 NODE_CLASS_MAPPINGS = {

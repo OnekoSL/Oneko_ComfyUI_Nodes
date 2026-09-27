@@ -678,17 +678,11 @@ def _unload_after_run(ollama_url, model, timeout_seconds, enabled):
 
 
 def _normalize_tags_url(ollama_url):
-    url = str(ollama_url).strip() or DEFAULT_OLLAMA_URL
-    if not url.startswith(("http://", "https://")):
-        url = f"http://{url}"
-    return f"{url.rstrip('/')}/api/tags"
+    return _normalize_generate_url(ollama_url).removesuffix("/generate") + "/tags"
 
 
 def _normalize_show_url(ollama_url):
-    url = str(ollama_url).strip() or DEFAULT_OLLAMA_URL
-    if not url.startswith(("http://", "https://")):
-        url = f"http://{url}"
-    return f"{url.rstrip('/')}/api/show"
+    return _normalize_generate_url(ollama_url).removesuffix("/generate") + "/show"
 
 
 def _ollama_model_capabilities(ollama_url, model):
@@ -1063,6 +1057,11 @@ def _prepare_language_inputs(
     if not any(value.strip() for value in source_values.values()):
         return source_values, "not_checked", False
 
+    # Leave room to copy every field plus translation expansion and JSON syntax.
+    # This is a conservative byte-based budget, not a model-specific token count.
+    source_bytes = sum(len(value.encode("utf-8")) for value in source_values.values())
+    num_predict = max(256, 128 + 2 * source_bytes)
+
     try:
         response = _request_ollama(
             ollama_url,
@@ -1075,7 +1074,7 @@ def _prepare_language_inputs(
             context_length,
             output_schema=LANGUAGE_SCHEMA,
             system_instructions=LANGUAGE_SYSTEM_INSTRUCTIONS,
-            num_predict=256,
+            num_predict=num_predict,
             reasoning=False,
         )
     except RuntimeError as error:
@@ -1096,7 +1095,7 @@ def _prepare_language_inputs(
                 context_length,
                 output_schema=LANGUAGE_SCHEMA,
                 system_instructions=LANGUAGE_SYSTEM_INSTRUCTIONS,
-                num_predict=256,
+                num_predict=num_predict,
                 reasoning=False,
             )
         except RuntimeError as error:
@@ -2257,7 +2256,8 @@ background_candidates: {_candidate_tag_text(data["background_candidates"])}
 style_candidates: {_candidate_tag_text(data["style_candidates"])}
 discarded_noise: {_candidate_tag_text(data["discarded_noise"])}
 
-Use the candidate lists as the main source of truth.
+The original source, style anchor, and spatial inputs are the source of truth.
+Use the candidate lists only as suggestions; discard any candidate that contradicts those requirements.
 You may add a few fitting visual details when they clarify the image.
 Do not move foreground candidates into background_prompt.
 Do not move background candidates into foreground_prompt.
@@ -2267,7 +2267,7 @@ For Krea 2, turn them into neutral natural prose with concrete color, quantity, 
 If background_candidates name a setting, expand that setting with matching visible objects from that same kind of place.
 Do not borrow objects from unrelated example settings.
 Do not copy candidate-list names, empty markers, or instruction words into any output value.
-The raw word salad below is only a reference for context."""
+Preserve explicit quantities, negations, actions, and settings from the original source even when the candidate lists omit them."""
 
 
 FOREGROUND_TAG_FILLERS = (
@@ -2545,7 +2545,7 @@ def _expand_tags_from_terms(terms, expansions):
     joined = " ".join(str(term).lower() for term in terms)
     tags = []
     for triggers, expanded_tags in expansions:
-        if any(trigger in joined for trigger in triggers):
+        if any(_term_matches_keyword(joined, trigger.replace("_", " ")) for trigger in triggers):
             tags.extend(expanded_tags)
     return tags
 
@@ -4633,6 +4633,11 @@ def _build_repair_prompt(
     right="",
     top="",
     bottom="",
+    *,
+    word_salad="",
+    style_anchor="",
+    style_cluster=DEFAULT_STYLE_CLUSTER,
+    prompt_mode=DEFAULT_PROMPT_MODE,
 ):
     spatial_context = _spatial_context(target_profile, left, right, top, bottom)
     spatial_block = f"\n{spatial_context}\nKeep these spatial hints represented in the repaired values.\n" if spatial_context else ""
@@ -4641,7 +4646,14 @@ It must contain exactly these string keys:
 {", ".join(RESPONSE_KEYS)}
 Every value except negative must be a non-empty string.
 Negative fields must be real negative prompts unless the target instructions say the model uses no negative prompt.
+{_target_profile_instructions(target_profile, style_cluster)}
+{_prompt_mode_instructions(prompt_mode)}
 {spatial_block}
+
+Original source (recover omitted requirements from this text):
+{str(word_salad).strip()}
+Fixed style anchor:
+{str(style_anchor).strip() or '(none)'}
 
 Invalid answer:
 {raw_response}"""
@@ -4658,9 +4670,6 @@ def _build_minimal_retry_prompt(
     bottom="",
     prompt_mode=DEFAULT_PROMPT_MODE,
 ):
-    terms = ", ".join(_curated_terms(f"{style_anchor} {word_salad}", limit=18))
-    if not terms:
-        terms = "anime subject, clean composition, detailed lighting"
     target_profile = _normalize_target_profile(target_profile)
     candidate_context = _build_candidate_context(target_profile, word_salad, style_anchor)
     example = _candidate_few_shot_example(target_profile, word_salad, style_anchor)
@@ -4673,7 +4682,10 @@ def _build_minimal_retry_prompt(
 Use exactly these keys: {", ".join(RESPONSE_KEYS)}
 {_target_profile_instructions(target_profile, style_cluster)}
 {example_block}{candidate_block}{spatial_block}
-Source visual terms: {terms}
+Original source:
+{str(word_salad).strip()}
+Fixed style anchor:
+{str(style_anchor).strip() or '(none)'}
 Rules: base_prompt contains global model/style or natural style guidance; foreground_prompt describes the main subject; background_prompt describes the visible setting; negative lists quality/anatomy/artifact problems to avoid unless the target profile says it is unused; report is one short sentence."""
 
 
@@ -5262,12 +5274,19 @@ class OnekoOllamaPromptRefiner:
             repair_response = _request_ollama(
                 ollama_url,
                 ollama_model,
-                _build_repair_prompt(raw_response, profile, left, right, top, bottom),
+                _build_repair_prompt(
+                    raw_response, profile, left, right, top, bottom,
+                    word_salad=word_salad,
+                    style_anchor=style_anchor,
+                    style_cluster=style_cluster,
+                    prompt_mode=prompt_mode,
+                ),
                 int(seed) + 1,
                 0.0,
                 1.0,
                 timeout_seconds,
                 context_length,
+                system_instructions=_prompt_system_instructions(prompt_mode),
                 **generation_settings,
             )
             responses.append(("repair", repair_response))
@@ -5303,6 +5322,7 @@ class OnekoOllamaPromptRefiner:
                 1.0,
                 timeout_seconds,
                 context_length,
+                system_instructions=_prompt_system_instructions(prompt_mode),
                 **generation_settings,
             )
             responses.append(("minimal", minimal_response))

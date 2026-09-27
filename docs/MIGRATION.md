@@ -1,5 +1,24 @@
 # Migration zu Oneko
 
+## Modularer Audio Timeline Mixer
+
+Der neue `OnekoAudioTimelineMixer` ersetzt bestehende Fünfspur-Nodes nicht automatisch. `NukunAudioTimelineMixer5` und `OnekoAudioTimelineMixer5` bleiben mit ihren bisherigen Eingängen nutzbar. Das bestehende ID-Migrationswerkzeug ordnet weiterhin den alten Fünfspur-Vertrag zu; es erstellt keine Settings-Nodes.
+
+Für den manuellen Umstieg eine Workflow-Kopie erstellen:
+
+1. `Audio Timeline Mixer (Oneko)` hinzufügen und die sechs globalen Werte direkt in dessen Masterregler übernehmen.
+2. Pro Spur eine `Audio Track Settings (Oneko)` erstellen, das bisherige Audio dort anschließen und die fünf Spurwerte übernehmen. Fades bleiben in **Millisekunden**, Startzeiten in **Sekunden**.
+3. Den `track`-Ausgang jeder Spur-Node an den passenden `track_N`-Eingang des Mixers anschließen.
+4. Die drei Ausgänge in derselben Reihenfolge weiterverbinden: Audio, Dauer, Bericht. Erst nach Prüfung der Kopie den alten Mixer daraus entfernen.
+
+Die Anzeige verwendet `track_1` usw. Im API-Prompt heißen diese Autogrow-Eingänge `tracks.track_1` usw.; sie erwarten `ONEKO_AUDIO_TRACK`. Lücken behalten ihre Nummern. Die Frontend-Erweiterung gehört zum Paket und muss mitgeladen werden. Audio und Einstellungen reisen zusammen; mehrfach angeschlossene Pakete werden mehrfach gemischt.
+
+### Umstieg von der modularen Zwischenversion
+
+Die IDs `OnekoAudioTrackSettings` und `OnekoAudioTimelineMixer` bleiben, ihre Anschlüsse ändern sich jedoch bewusst. `ONEKO_AUDIO_TRACK_SETTINGS`, `ONEKO_AUDIO_MASTER_SETTINGS` und die separate `OnekoAudioMasterSettings` entfallen. Gespeicherte Workflows der Zwischenversion sind daher **nicht direkt kompatibel**.
+
+Vor dem Update die sechs Werte der Master-Node notieren. In einer Workflow-Kopie Spur-Nodes und Mixer neu anlegen, Werte übertragen und nach obigem Schema verbinden: Das bisherige `audio_N` geht nun in den Audioeingang der jeweiligen Spur-Node; deren `track` geht zum Mixer. Falls zuvor eine Settings-Node mehrere unterschiedliche Audios steuerte, für jedes Audio eine eigene Spur-Node mit denselben Werten anlegen. Nach Prüfung die alten modularen Nodes entfernen. Persönliche Workflows werden nicht automatisch umgeschrieben.
+
 ## Direkt übernommene Nodes
 
 Die Zuordnung der 40 ausgewählten IDs steht in `migration/node_id_map.json`. Überwiegend wird `Nukun…` zu `Oneko…`; `LoadImagewithSubfolders` wird zu `OnekoLoadImageWithSubfolders`. Kategorien und Anzeigenamen ändern sich, die bisherigen Inputnamen und Outputpositionen bleiben bei diesen übernommenen Nodes erhalten.

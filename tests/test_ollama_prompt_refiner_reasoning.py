@@ -27,6 +27,12 @@ class FakeResponse:
 
 
 class ReasoningModelRequestTests(unittest.TestCase):
+    def test_discovery_accepts_the_same_generate_url_as_generation(self):
+        for url in ("localhost:11434", "http://localhost:11434/api/generate/"):
+            with self.subTest(url=url):
+                self.assertEqual(refiner._normalize_tags_url(url), "http://localhost:11434/api/tags")
+                self.assertEqual(refiner._normalize_show_url(url), "http://localhost:11434/api/show")
+
     def test_reka_uses_schema_first_generation_for_the_four_verified_profiles(self):
         model = "autoren-reka-flash-3-21b-reasoning-q4:latest"
         for profile in ("krea2", "z_image", "wan2_2_video", "pony_v7"):

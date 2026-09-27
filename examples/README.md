@@ -21,6 +21,12 @@ Die minimale Generierungskette lautet: Wan-Modell/CLIP/VAE → Text-Encoding →
 
 ## Audio
 
+[`oneko_ollama_verse_maker.json`](oneko_ollama_verse_maker.json) erzeugt aus einer neutralen Liedidee deutsche Lyrics und den passenden englischen Musikstil und zeigt beide Texte sowie den Report über Core `PreviewAny` an. Benötigt Ollama und ein bereits installiertes Textmodell; erzeugt kein Audio. `Neu schreiben` nutzt Idee und Vorgaben, `Überarbeiten` benötigt einen Ausgangstext. Strukturregler und freie Wünsche lassen sich kombinieren; ausdrücklich abweichende Wünsche haben Vorrang. Modell auswählen und für neue Varianten den Seed ändern.
+
+Für YuE2: `lyrics` und `style` des Verse Makers jeweils an **beide** Nodes `YuE2GenerateABC` und `YuE2GenerateMusic` anschließen; ABC-Ausgang wie bisher an die Musik-Node. Für ACE kann `style` als Tags-Text und `lyrics` als Liedtext genutzt werden. Der Verse Maker erstellt keine ACE-Timeline-Pläne.
+
+[`oneko_audio_timeline_modular.json`](oneko_audio_timeline_modular.json) zeigt zwei Spuren, je eine Spur-Node mit Audioeingang, Masterregler im Mixer und FLAC-Ausgabe. Die Core-`EmptyAudio`-Nodes erzeugen zum sofortigen Funktionstest **Stille** und benötigen keine Modelle oder Eingabedateien. Für hörbare Inhalte diese beiden Quellen durch `LoadAudio` oder beliebige Audiogeneratoren ersetzen. Die zweite Spur beginnt nach einer Sekunde; der Mixer ergänzt selbstständig weitere Spur-Eingänge.
+
 Für fertige Audiodateien: Core LoadAudio → `OnekoAudioTimelineMixer5` → Core SaveAudio. Spuren an `audio_1` bis `audio_5` anschließen; Gain, Offset, Fades, Zielrate und Peakmodus pro Bedarf einstellen. Der Mixer verarbeitet Standard-`AUDIO`-Dictionaries.
 
 Für ACE-Songs: Tags/Lyrics → `OnekoAceSongVariationDirector` → `OnekoAceSongTimelineConditioning` → passende ACE-Step-1.5-Samplingkette → Audioausgabe. Den `plan_json`-Ausgang des Directors mit dem entsprechenden optionalen Timeline-Eingang verbinden. Zusätzlich das ACE-CLIP-Modell an `clip` und das bereits erzeugte ACE-Basisconditioning an `base_conditioning` anschließen. Der Director benötigt Ollama; die Timeline ergänzt die vorhandene ACE-Konditionierung.
