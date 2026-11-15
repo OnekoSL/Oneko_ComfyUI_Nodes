@@ -1,5 +1,29 @@
 # Validierungsstand
 
+## Release 0.2.1: lokale USDU- und Preview-Einstellungen — 15.11.2026
+
+Onekos globale USDU-Sampling-Ersetzung und Preview-Umschaltung sind abgelöst. HiResFix bindet Noise und interne Referenzen über Cores `OUTER_SAMPLE` an ein geklontes Modell. Referenzen werden vor Cores Speicherbedarfsermittlung und Conditioning-Aufbereitung ergänzt und anschließend auch bei Fehlern zurückgesetzt. Explizite Preview-Methoden verwenden eigene Callbacks und native Decoder; `default` delegiert an Core.
+
+**Gesamte Python-Suite: 1.050 Tests und 66 Untertests bestanden, 14,41 s im abschließenden Release-Lauf.** Die beiden neuen Testdateien ergänzen 59 USDU- und 14 Preview-Fälle; bestehende Integrationstests prüfen den neuen Übergabepunkt. Umgebung wie bei der unten dokumentierten Release-Nachprüfung: ComfyUI 0.45.0, Python 3.12.10 und PyTorch 2.11.0+cu130, alle neuen Läufe auf CPU.
+
+| Prüfung | Ergebnis |
+|---|---|
+| Nativer USDU-Tilepfad | Faktor-8-/Faktor-16-VAEs, Tilepadding, Batchreferenzen, fehlende DD-Maske und Fehlerpfad bestanden; externe Samplingfunktion unverändert |
+| Alle 29 Oneko-Noise-Profile | Seed, Stärke und Detailbias stimmen mit dem bestehenden privaten Noise-Generator überein |
+| 27 native CPU-Sampling-Vergleiche | Euler, DPM2 und Euler Ancestral × Denoise 0 / 0,4 / 1 × Gaussian / Pink / Pony Balanced: Latents und mit kleinem CPU-Testdecoder dekodierte Pixel bitgleich zum vorherigen Sampling-Pfad |
+| Überlappende USDU-Wrapper | Getrennte Modelle, Seeds, Noise-Profile, Referenzen und Warnzustände; erfolgreiche und fehlschlagende Aufrufe ohne Austausch fremder Samplingfunktionen |
+| Bestehende Modellwrapper | Wrapper aus Modelloptionen und ModelPatcher bleiben aktiv; deren Noise-Änderungen werden weitergereicht, das Originalmodell bleibt unverändert |
+| Preview-Auswahl | none / auto / latent2rgb / taesd, Default-Delegation, fehlende Decoder und unterschiedliche parallele Methoden einschließlich Fehlerpfad bestanden; globale Methodenwahl unverändert |
+| Preview-Decoder und Ausgaben | Native RGB-Ausgabe, Bild-/Video-TAESD-Konstruktorparameter, vollständige verschachtelte x0-Ausgabe und Fortschrittsmeldungen geprüft |
+| Nativer Import und Eingabeschemas | Nukun und Oneko in getrenntem CPU-Prozess geladen: **45 zusätzliche Oneko-IDs und 45 gültige Eingabeschemas**, keine ID-Kollision; beide Ollama-Routen je genau einmal registriert |
+| JavaScript und Release-Metadaten | **8 Tests bestanden** mit `node --test tests/*.mjs`; Versionsmetadaten und aktuelle Dokumentation auf 0.2.1 zusammengeführt, `git diff --check` ohne Fehler |
+
+**Grenzen:** Die Samplingvergleiche nutzen natives Core-/MOSS-Sampling mit kleiner deterministischer Testvorhersage und einem CPU-Testdecoder. Sie ersetzen keinen GPU-Bildvergleich mit echten Modell- und VAE-Gewichten. TAESD-Konstruktoren wurden ohne tatsächliche Decodergewichte geprüft. Keine neuen GPU-Generierungen, Ollama-Aufrufe oder Browserprüfungen; frühere Modellabnahmen beziehen sich auf ihre damaligen Quellstände.
+
+Das externe USDU-Paket besitzt weiterhin gemeinsame Batch-, Upscaler-, Logging- und Fortschrittszustände; auch Core-Decoder und Fortschrittshooks bleiben native Komponenten. Die Tests belegen die Isolation von Onekos Wrappern und Preview-Methoden, keine allgemeine Thread-Sicherheit des Gesamtstapels. Cores nativer Samplereinstieg erzeugt weiterhin zunächst Gaussian Noise und verändert dabei seinen globalen Torch-Zufallszustand; Onekos eigener Generator bleibt privat. Bei `denoise=0` überspringt Core den Wrapper, sodass dessen DD-Maskenwarnung dann entfällt. Core und Drittanbieterpakete wurden nicht verändert, die laufende ComfyUI-Instanz nicht neu gestartet.
+
+Die folgenden Abschnitte bleiben als historische Prüfberichte erhalten; insbesondere die noch offenen globalen Eingriffe im Release 0.2.0 sind mit Release 0.2.1 behoben.
+
 ## Release-Nachprüfung — 15.11.2026
 
 Der Quellstand für **Oneko 0.2.0 mit 45 Nodes** wurde erneut geprüft. Sechs konkrete Probleme wurden korrigiert: mehrteilige Sampler-Ausgaben, GPU-Allokationen im Sculpt-CPU-Fallback, zu späte Wan-Eingabeprüfung, ungeschütztes Ersetzen von Videoexporten, fehlende Video-Abhängigkeiten und zoomabhängige Mauskoordinaten im Regionen-Editor.

@@ -1,10 +1,10 @@
 # Oneko ComfyUI Nodes
 
-Eine kuratierte Sammlung von **45 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.0** enthält den modularen Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung einschließlich experimentellem DiT Block Noise. [Änderungen in 0.2.0](CHANGELOG.md#020--2026-11-15).
+Eine kuratierte Sammlung von **45 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.1** behebt die globalen USDU-/Preview-Eingriffe und stellt die Node-Anzahl klar. Enthalten sind weiterhin der modulare Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung einschließlich experimentellem DiT Block Noise. [Änderungen in 0.2.1](CHANGELOG.md#021--2026-11-15).
 
 Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung. Registrierung, Anzeigenamen, Menüs, Frontend-Erweiterungen und Ollama-Route verwenden Oneko. Das Paket enthält seine Implementierungen selbst und importiert das alte Nukun-Paket nicht.
 
-## Startauswahl
+## Node-Übersicht
 
 | Bereich | Nodes | Schwerpunkt |
 |---|---:|---|
@@ -51,14 +51,14 @@ Modelle, LoRAs, Ausgaben und eigene Workflows gehören in die ComfyUI-Verzeichni
 
 ## Verbesserungen gegenüber dem Ausgangspaket
 
-- 40 ausgewählte statt 58 registrierte Nodes; doppelte Preset-Wrapper und ältere Integrationspfade entfallen.
+- Aus den 58 Nodes des Ausgangspakets wurden für Version 0.1.0 zunächst 40 übernommen. Mit fünf neuen Nodes umfasst Oneko seit Version 0.2.0 insgesamt **45 Nodes**; doppelte Preset-Wrapper und ältere Integrationspfade entfallen.
 - Nach Arbeitsschritten sortierte Menüs und einheitliche Oneko-Kennungen einschließlich JavaScript/CSS und Ollama-Route.
 - Der rekursive Bildloader filtert Nichtbilder aus und übernimmt ComfyUIs Decoder, einschließlich Mehrbildformaten.
 - Ungültige Noise-Profile werden klar zurückgewiesen, statt still Gaussian Noise zu verwenden.
 - Interne doppelte Registrierungen führen zu einer eindeutigen Fehlermeldung.
 - Ein kopierender Workflow-Migrator unterstützt die direkt übernommenen IDs; nicht ausgewählte Nodes werden gemeldet.
 
-Die beiden bisher vorhandenen globalen Eingriffe des USDU-Noise-Wrappers und des Preview-Overrides wurden nicht als gelöst ausgegeben. Ihre gezielte Ablösung steht in der Roadmap. GPU-Bildqualität, reale Ollama-Ausgaben und vollständige Video-/Musikgenerierung benötigen zusätzlich Modelltests.
+Seit Version 0.2.1 arbeiten USDU-Noise und Preview-Auswahl pro Aufruf: Ein Wrapper am geklonten Modell ersetzt den globalen Sampling-Austausch, und explizite Preview-Methoden bleiben auf ihren Callback begrenzt. Das externe USDU-Paket besitzt weiterhin eigene gemeinsame Laufzeitzustände; eine allgemeine Parallelitätsgarantie folgt daraus nicht. [Prüfumfang und Grenzen](docs/VALIDIERUNG.md). GPU-Bildqualität, reale Ollama-Ausgaben und vollständige Video-/Musikgenerierung benötigen zusätzlich Modelltests.
 
 ## Beispiele und Entwicklung
 

@@ -11,6 +11,8 @@ import comfy.sample
 import comfy.utils
 import latent_preview
 
+from .preview_core import prepare_preview_callback
+
 
 MAX_SEED = 0xffffffffffffffff
 NOISE_TYPES = [
@@ -185,26 +187,20 @@ def sample_custom_advanced(
         noise_mask = latent["noise_mask"]
 
     x0_output = {}
-    override_preview = preview_method not in (None, "", "default")
-    if override_preview:
-        latent_preview.set_preview_method(preview_method)
-    try:
-        callback = latent_preview.prepare_callback(guider.model_patcher, sigmas.shape[-1] - 1, x0_output)
-
-        disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
-        samples = guider.sample(
-            noise.generate_noise(latent),
-            latent_samples,
-            sampler,
-            sigmas,
-            denoise_mask=noise_mask,
-            callback=callback,
-            disable_pbar=disable_pbar,
-            seed=noise_seed,
-        )
-    finally:
-        if override_preview:
-            latent_preview.set_preview_method(None)
+    callback = prepare_preview_callback(
+        guider.model_patcher, sigmas.shape[-1] - 1, x0_output, preview_method,
+    )
+    disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
+    samples = guider.sample(
+        noise.generate_noise(latent),
+        latent_samples,
+        sampler,
+        sigmas,
+        denoise_mask=noise_mask,
+        callback=callback,
+        disable_pbar=disable_pbar,
+        seed=noise_seed,
+    )
     samples = samples.to(comfy.model_management.intermediate_device())
 
     out = latent.copy()

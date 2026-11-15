@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-11-15
+
+- HiResFix bindet Noise und interne Referenzen über Cores `OUTER_SAMPLE` an ein geklontes Modell. Die globale Samplingfunktion von USDU wird auch bei Fehlern nicht mehr ersetzt; bestehende Modellwrapper bleiben aktiv.
+- Explizite Preview-Methoden gelten pro Sampler-Callback. Cores globale Preview-Einstellung bleibt unverändert; `default` verwendet weiterhin den nativen Core-Pfad.
+- **1.050 Python-Tests und 66 Untertests bestanden**, einschließlich CPU-Ergebnisvergleichen und überlappenden Erfolgs-/Fehlerläufen. Eigene gemeinsame Laufzeitzustände des externen USDU-Pakets bleiben außerhalb dieser Korrektur; [Prüfumfang und Grenzen](docs/VALIDIERUNG.md).
+- README klargestellt: aktuell **45 Nodes** seit 0.2.0; **40** war die ursprüngliche Auswahl für 0.1.0.
+- **8 JavaScript-Tests** und nativer Import samt Eingabeschemas aller **45 Nodes** bestanden. Node-IDs, Anschlüsse und gespeicherte Werte bleiben erhalten; bestehende Workflows benötigen keine Anpassung. Nach dem Update ComfyUI nach Abschluss laufender Aufträge neu starten.
+
 ## 0.2.0 — 2026-11-15
 
 Die Sammlung wächst von 40 auf **45 öffentliche Nodes**. Schwerpunkt sind MOSS-Unterstützung, modulare Audiospuren und die Korrekturen aus der Release-Nachprüfung.

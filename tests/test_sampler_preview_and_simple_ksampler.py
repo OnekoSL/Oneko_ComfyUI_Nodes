@@ -24,6 +24,8 @@ from Oneko_ComfyUI_Nodes.nodes.universal_noise_sampler import (  # noqa: E402
 
 
 class _FakeModel:
+    latent_format = object()
+
     def process_latent_out(self, latent):
         return latent
 
@@ -89,12 +91,12 @@ class SamplerPreviewTests(unittest.TestCase):
 
     @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.comfy.model_management.intermediate_device", return_value="cpu")
     @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.comfy.sample.fix_empty_latent_channels", side_effect=lambda model, samples, *args: samples)
-    @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.latent_preview.prepare_callback", return_value=lambda *args: None)
+    @mock.patch("Oneko_ComfyUI_Nodes.nodes.preview_core._get_previewer", return_value=None)
     @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.latent_preview.set_preview_method")
-    def test_preview_overrides_restore_after_sampling(
+    def test_preview_overrides_leave_global_setting_untouched(
         self,
         set_preview_method,
-        prepare_callback,
+        get_previewer,
         fix_empty_latent_channels,
         intermediate_device,
     ):
@@ -102,27 +104,21 @@ class SamplerPreviewTests(unittest.TestCase):
             with self.subTest(method=method):
                 set_preview_method.reset_mock()
                 self._sample(method)
-                self.assertEqual(
-                    set_preview_method.mock_calls,
-                    [mock.call(method), mock.call(None)],
-                )
+                set_preview_method.assert_not_called()
 
     @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.comfy.sample.fix_empty_latent_channels", side_effect=lambda model, samples, *args: samples)
-    @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.latent_preview.prepare_callback", return_value=lambda *args: None)
+    @mock.patch("Oneko_ComfyUI_Nodes.nodes.preview_core._get_previewer", return_value=None)
     @mock.patch("Oneko_ComfyUI_Nodes.nodes.noise_sampler_core.latent_preview.set_preview_method")
-    def test_preview_override_restores_when_sampling_raises(
+    def test_preview_override_leaves_global_setting_untouched_when_sampling_raises(
         self,
         set_preview_method,
-        prepare_callback,
+        get_previewer,
         fix_empty_latent_channels,
     ):
         with self.assertRaises(RuntimeError):
             self._sample("latent2rgb", should_raise=True)
 
-        self.assertEqual(
-            set_preview_method.mock_calls,
-            [mock.call("latent2rgb"), mock.call(None)],
-        )
+        set_preview_method.assert_not_called()
 
 
 class UniversalKSamplerRegistrationTests(unittest.TestCase):

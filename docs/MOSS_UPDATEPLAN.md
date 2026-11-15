@@ -139,7 +139,7 @@ Externe Faktor-16-Referenzen werden ausdrücklich abgewiesen: Die installierte U
 
 Einstellungen, Laufzeiten, Sichtprüfung und Grenzen stehen in [VALIDIERUNG.md](VALIDIERUNG.md). Der gemessene GPU-Speicherwert des Basisvergleichs ist ein im 2-Sekunden-Abstand beobachtetes geräteweites Maximum inklusive Desktop/anderer Anwendungen, kein isolierter Allokationspeak. Für HiResFix/Remaster und aktive Sculpt-/Regional-Läufe wurde kein Speicherpeak erfasst.
 
-Die neutrale [MOSS-Vorlage mit Oneko-Loader, Latent und Sampler](../examples/oneko_moss_oneko_pipeline.json) ist verfügbar. Node-Katalog, Beispiele, Changelog und Migrationshinweise sind aktualisiert. Über den einzelnen nachgeprüften 2048 × 3072-Hooch-Fall hinausgehende große MOSS-Bilder, andere Upscaler, gecachte Referenz-K/V in den neuen Samplingtests und überlappende USDU-Aufrufe bleiben außerhalb dieser Abnahme. Der bestehende globale USDU-Sampling-Austausch bleibt eine gesonderte Architekturaufgabe.
+Die neutrale [MOSS-Vorlage mit Oneko-Loader, Latent und Sampler](../examples/oneko_moss_oneko_pipeline.json) ist verfügbar. Node-Katalog, Beispiele, Changelog und Migrationshinweise sind aktualisiert. Über den einzelnen nachgeprüften 2048 × 3072-Hooch-Fall hinausgehende große MOSS-Bilder, andere Upscaler, gecachte Referenz-K/V in den neuen Samplingtests und überlappende USDU-Aufrufe bleiben außerhalb dieser Abnahme. Der damals noch globale USDU-Sampling-Austausch ist in Version 0.2.1 durch einen lokalen Modellwrapper ersetzt; zusätzliche CPU- und Isolationstests sind im [aktuellen Prüfprotokoll](VALIDIERUNG.md) dokumentiert.
 
 ## G — MOSS-Profil im Ollama Prompt Refiner
 
@@ -191,7 +191,7 @@ Ungültige/fehlende Masken, unbekannte Tokenexpansionen und veraltete Herkunftsi
 
 ## Allgemeine Wartung nach der MOSS-Etappe
 
-Bestehende Punkte aus [ROADMAP.md](../ROADMAP.md) weiterführen: globalen USDU-Sampling-Austausch ablösen, Preview ohne globalen Zustandswechsel und gemeinsamen Ollama-Transport auslagern. Eigenständige Architekturaufgaben, besonders mit Tests für Fehlerpfade und überlappende Aufrufe; keine Voraussetzung für den MOSS-Loadertyp.
+USDU-Sampling und Preview-Auswahl arbeiten seit Version 0.2.1 lokal am Modell beziehungsweise Callback; Fehlerpfade und überlappende Aufrufe sind geprüft. Offen bleibt der gemeinsame Ollama-Transport aus [ROADMAP.md](../ROADMAP.md). Diese Architekturaufgaben ändern die Voraussetzungen des MOSS-Loadertyps nicht.
 
 ## Quellen und Grenzen
 

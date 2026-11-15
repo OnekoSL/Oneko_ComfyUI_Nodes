@@ -1,5 +1,13 @@
 # Migration zu Oneko
 
+## Version 0.2.1: lokale USDU- und Preview-Einstellungen
+
+Node-IDs, Anschlüsse, Widgetreihenfolge, Defaults und Seed-Berechnung bleiben erhalten. Bestehende Workflows benötigen keine Änderungen. ComfyUI nach dem Ende laufender Aufträge neu starten, um den neuen Quellstand zu laden.
+
+HiResFix übergibt Oneko-Noise und interne Referenzen jetzt über einen Wrapper am geklonten Modell. Die Samplingfunktion des externen USDU-Pakets bleibt unverändert. Cores nativer Samplereinstieg erzeugt vor dem Wrapper weiterhin sein anfängliches Gaussian Noise; dessen eigener Einfluss auf den globalen Torch-Zufallszustand bleibt bestehen. Die geprüften CPU-Sampling-Ausgaben stimmen bei gleichen Seeds mit dem vorherigen Oneko-Pfad überein. Ohne tatsächliches Sampling (`denoise=0`) läuft der Wrapper nicht; dann entfällt auch seine Warnung über eine fehlende Differential-Diffusion-Maske.
+
+Explizite Preview-Methoden gelten nur für ihren Callback. `default` übernimmt weiterhin Cores aktuelle Einstellung; bei fehlendem TAESD-Decoder gilt der native RGB-Fallback. Das externe USDU-Paket, Decoder und Fortschrittsanzeige behalten eigene gemeinsame Laufzeitzustände. Die Änderung ist keine allgemeine Zusage für parallel laufende GPU-Jobs. [Prüfumfang und Grenzen](VALIDIERUNG.md).
+
 ## MOSS: Ollama Prompt Refiner
 
 Im vorhandenen `OnekoOllamaPromptRefiner` steht zusätzlich `target_profile=moss_image` zur Verfügung. ComfyUI nach Ende laufender Aufträge neu starten und die Browserseite neu laden. Anschließend das Profil ausdrücklich auswählen; das bisherige Standardprofil `pony_v7`, bestehende Workflowwerte, Node-ID, Widgetreihenfolge, acht Ausgänge und Seeds bleiben unverändert. Kein Austausch der Node oder neue Verkabelung nötig.

@@ -13,7 +13,9 @@ import torch.nn.functional as F
 
 import comfy.latent_formats
 import comfy.model_patcher
+import comfy.model_sampling
 import comfy.sd
+import latent_preview
 from Oneko_ComfyUI_Nodes.nodes import hiresfix_tiled as hires
 from tests.paths import COMFY_ROOT
 
@@ -72,7 +74,7 @@ class SmallVAE:
 def make_model(compression=16):
     host = torch.nn.Module()
     host.latent_format = comfy.latent_formats.Flux2() if compression == 16 else comfy.latent_formats.SD15()
-    host.model_sampling = SimpleNamespace(sigma_min=0.0, timestep=lambda value: value)
+    host.model_sampling = comfy.model_sampling.ModelSamplingDiscrete()
     return comfy.model_patcher.ModelPatcher(host, load_device=torch.device("cpu"), offload_device=torch.device("cpu"))
 
 
@@ -88,7 +90,8 @@ def settings(image, model, vae):
 
 def install_native_pipeline(monkeypatch, native_usdu, fail=False):
     monkeypatch.setitem(hires.nodes.NODE_CLASS_MAPPINGS, "UltimateSDUpscaleNoUpscale", native_usdu)
-    processing = hires._get_usdu_processing_globals(native_usdu)
+    processing = native_usdu.__mro__[1].upscale.__globals__["StableDiffusionProcessing"].__init__.__globals__
+    original_sample = processing["sample"]
     shared = processing["shared"]
     # USDU normally owns these process-local values; restore them after each test.
     for key in ("batch", "batch_as_tensor", "actual_upscaler", "sd_upscalers"):
@@ -100,17 +103,23 @@ def install_native_pipeline(monkeypatch, native_usdu, fail=False):
     monkeypatch.setattr(hires.ImageUpscaleWithModel, "execute",
                         lambda model, image: (F.interpolate(image.movedim(-1, 1), scale_factor=2,
                                                           mode="nearest-exact").movedim(1, -1),))
-    monkeypatch.setattr(hires.latent_preview, "prepare_callback", lambda *args: None)
+    monkeypatch.setattr(latent_preview, "prepare_callback", lambda *args: None)
     calls = []
 
-    def sample(model, noise, steps, cfg, sampler_name, scheduler, positive, negative, latent, **kwargs):
-        calls.append(dict(model=model, noise=noise.clone(), latent=latent.clone(),
-                          positive=positive, negative=negative, **kwargs))
+    def sample(guider, noise, latent, sampler, sigmas, denoise_mask=None, callback=None,
+               disable_pbar=False, seed=None, **kwargs):
+        # The real native sampler has reached OUTER_SAMPLE with cropped conds.
+        assert processing["sample"] is original_sample
+        positive = [[cond.get("cross_attn"), cond] for cond in guider.conds["positive"]]
+        negative = [[cond.get("cross_attn"), cond] for cond in guider.conds["negative"]]
+        calls.append(dict(model=guider.model_patcher, noise=noise.clone(), latent=latent.clone(),
+                          positive=positive, negative=negative, noise_mask=denoise_mask,
+                          sigmas=sigmas.clone(), seed=seed, **kwargs))
         if fail:
             raise RuntimeError("deliberate tile failure")
         return latent + 0.01
 
-    monkeypatch.setattr(hires.comfy.sample, "sample", sample)
+    monkeypatch.setattr(hires.comfy.samplers.CFGGuider, "outer_sample", sample)
     return calls, processing
 
 
@@ -195,7 +204,7 @@ def test_factor16_external_references_fail_before_upscale(monkeypatch, side):
     assert values[side][0][1]["reference_latents"][0] is reference
 
 
-def test_native_usdu_failure_restores_sample_and_caller_state(monkeypatch, native_usdu):
+def test_native_usdu_failure_never_changes_sample_or_caller_state(monkeypatch, native_usdu):
     _, processing = install_native_pipeline(monkeypatch, native_usdu, fail=True)
     previous_sample = processing["sample"]
     image = torch.full((1, 48, 56, 3), .5)
@@ -211,15 +220,15 @@ def test_native_usdu_failure_restores_sample_and_caller_state(monkeypatch, nativ
 
 def test_supplied_noise_mask_reaches_native_differential_diffusion(monkeypatch, caplog):
     model = make_model()
+    del model.model.model_sampling
+    model.model.model_sampling = SimpleNamespace(sigma_min=0.0, timestep=lambda value: value)
     patched = hires._first_output(hires.DifferentialDiffusion.execute(model, 0.7))
     latent = {"samples": torch.ones(1, 128, 4, 5),
               "noise_mask": torch.linspace(0, 1, 20).reshape(1, 4, 5)}
     mask = latent["noise_mask"]
-    monkeypatch.setattr(hires.latent_preview, "prepare_callback", lambda *args: None)
-
-    def sample(work_model, noise, steps, cfg, sampler, scheduler, positive, negative, samples, **kwargs):
-        assert kwargs["noise_mask"] is mask
-        callback = work_model.model_options["denoise_mask_function"]
+    def sample(noise, samples, sampler, sigmas, denoise_mask, callback, disable_pbar, seed, **kwargs):
+        assert denoise_mask is mask
+        callback = patched.model_options["denoise_mask_function"]
         result = callback(torch.tensor([.5]), mask, {
             "model": SimpleNamespace(inner_model=SimpleNamespace(model_sampling=model.model.model_sampling)),
             "sigmas": torch.tensor([1., 0.]),
@@ -228,9 +237,13 @@ def test_supplied_noise_mask_reaches_native_differential_diffusion(monkeypatch, 
         torch.testing.assert_close(result, expected)
         return samples
 
-    monkeypatch.setattr(hires.comfy.sample, "sample", sample)
+    from comfy.patcher_extension import WrapperExecutor
+    wrapper = hires._make_usdu_sampling_wrapper("auto", "gaussian", 1, .35, warn_missing_noise_mask=True)
+    guider = SimpleNamespace(conds={"positive": [], "negative": []})
+    executor = WrapperExecutor.new_class_executor(sample, guider, [wrapper])
     with caplog.at_level(logging.WARNING):
-        result = hires._make_usdu_noise_sample("auto", "gaussian", 1, .35, warn_missing_noise_mask=True)(
-            patched, 17, 2, 2.5, "euler", "simple", [], [], latent, .4, None, None)
-    assert result["noise_mask"] is mask
+        result = executor.execute(torch.zeros_like(latent["samples"]), latent["samples"],
+                                  object(), torch.tensor([1., 0.]), mask, None, True, 17)
+    assert result is latent["samples"]
+    assert not wrapper.missing_noise_mask
     assert not any("supplied no noise_mask" in record.message for record in caplog.records)

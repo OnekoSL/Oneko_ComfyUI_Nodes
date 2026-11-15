@@ -1,6 +1,6 @@
-# Node-Katalog: Oneko 0.2.0
+# Node-Katalog: Oneko 0.2.1
 
-45 öffentliche Nodes in Version 0.2.0, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
+45 öffentliche Nodes in Version 0.2.1, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
 
 ## Oneko/01 Loaders
 

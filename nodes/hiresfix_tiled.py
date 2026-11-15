@@ -4,8 +4,8 @@ import math
 import comfy.sample
 import comfy.samplers
 import comfy.utils
-import latent_preview
 import nodes
+from comfy.patcher_extension import WrappersMP
 from comfy_extras.nodes_differential_diffusion import DifferentialDiffusion
 from comfy_extras.nodes_edit_model import ReferenceLatent
 from comfy_extras.nodes_upscale_model import ImageUpscaleWithModel
@@ -187,10 +187,8 @@ class OnekoHiResFixTiled:
 
         usdu_class = _load_ultimate_sd_upscale_no_upscale()
         usdu_node = usdu_class()
-        processing_globals = _get_usdu_processing_globals(usdu_class)
-        original_sample = processing_globals["sample"]
         resolved_noise_profile = _resolve_noise_profile(noise_type, noise_profile)
-        tile_sample = _make_usdu_noise_sample(
+        tile_sample = _make_usdu_sampling_wrapper(
             noise_device,
             resolved_noise_profile,
             noise_strength,
@@ -198,7 +196,7 @@ class OnekoHiResFixTiled:
             reference_latent=full_image_reference,
             warn_missing_noise_mask=use_differential_diffusion,
         )
-        processing_globals["sample"] = tile_sample
+        work_model = _with_tile_sampling(work_model, tile_sample)
         try:
             final_image = _first_output(
                 usdu_node.upscale(
@@ -229,7 +227,6 @@ class OnekoHiResFixTiled:
                 )
             )
         finally:
-            processing_globals["sample"] = original_sample
             if tile_sample.missing_noise_mask:
                 # USDU suppresses root logging during its tile loop. Report only
                 # after it restores logging, once for this whole invocation.
@@ -254,82 +251,66 @@ def _resolve_noise_profile(noise_type, noise_profile):
     return noise_profile
 
 
-def _make_usdu_noise_sample(noise_device, noise_profile, noise_strength, detail_bias,
-                            reference_latent=None, warn_missing_noise_mask=False):
-    def sample(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise, custom_sampler, custom_sigmas):
-        latent_samples = latent["samples"]
-        fixed_samples = comfy.sample.fix_empty_latent_channels(
-            model,
-            latent_samples,
-            latent.get("downscale_ratio_spacial", None),
-        )
-        work_latent = latent.copy()
-        work_latent["samples"] = fixed_samples
-
+def _make_usdu_sampling_wrapper(noise_device, noise_profile, noise_strength, detail_bias,
+                                reference_latent=None, warn_missing_noise_mask=False):
+    def sample(executor, noise, latent_image, sampler, sigmas, denoise_mask=None,
+               callback=None, disable_pbar=False, seed=None, **kwargs):
+        # USDU retains its native tile/conditioning crop and Core sigma planning.
+        # Only this invocation's model supplies different noise to the sampler.
         noise = make_noise_generator(
             seed,
             noise_device,
             noise_profile,
             noise_strength,
             detail_bias,
-        ).generate_noise(work_latent)
+        ).generate_noise({"samples": latent_image})
 
-        noise_mask = None
-        if "noise_mask" in work_latent:
-            noise_mask = work_latent["noise_mask"]
-
-        if noise_mask is None and warn_missing_noise_mask:
+        if denoise_mask is None and warn_missing_noise_mask:
             sample.missing_noise_mask = True
 
+        guider = executor.class_obj
+        original_conds = guider.conds
         if reference_latent is not None:
             reference = reference_latent["samples"]
             # USDU batches image-major: all tile regions of image 0, then image 1.
-            tile_count, remainder = divmod(fixed_samples.shape[0], reference.shape[0])
+            tile_count, remainder = divmod(latent_image.shape[0], reference.shape[0])
             if remainder or tile_count < 1:
                 raise ValueError("HiResFix tile batch does not match the full-image reference batch.")
             if tile_count > 1:
                 reference = reference.repeat_interleave(tile_count, dim=0)
-            positive = _first_output(ReferenceLatent.execute(positive, {"samples": reference}))
-
-        callback = latent_preview.prepare_callback(model, steps)
-        disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
-        samples = comfy.sample.sample(
-            model,
-            noise,
-            steps,
-            cfg,
-            sampler_name,
-            scheduler,
-            positive,
-            negative,
-            fixed_samples,
-            denoise=denoise,
-            noise_mask=noise_mask,
-            callback=callback,
-            disable_pbar=disable_pbar,
-            seed=seed,
-        )
-
-        out = work_latent.copy()
-        out.pop("downscale_ratio_spacial", None)
-        out["samples"] = samples
-        return out
+            # OUTER_SAMPLE runs before prepare_sampling/process_conds. References
+            # must be visible there for both conditioning and memory estimation.
+            guider.conds = {
+                **original_conds,
+                "positive": [
+                    {**cond, "reference_latents": list(cond.get("reference_latents", [])) + [reference]}
+                    for cond in original_conds.get("positive", [])
+                ],
+            }
+        try:
+            return executor(noise, latent_image, sampler, sigmas, denoise_mask,
+                            callback, disable_pbar, seed, **kwargs)
+        finally:
+            if reference_latent is not None:
+                guider.conds = original_conds
 
     sample.missing_noise_mask = False
     return sample
 
 
-def _get_usdu_processing_globals(usdu_class):
-    for cls in usdu_class.mro():
-        upscale = cls.__dict__.get("upscale")
-        if upscale is None:
-            continue
-        stable_diffusion_processing = upscale.__globals__.get("StableDiffusionProcessing")
-        if stable_diffusion_processing is not None:
-            processing_globals = stable_diffusion_processing.__init__.__globals__
-            if "sample" in processing_globals:
-                return processing_globals
-    raise RuntimeError("Could not locate UltimateSDUpscale processing sample function.")
+def _with_tile_sampling(model, wrapper):
+    patched = model.clone()
+    options = patched.model_options.setdefault("transformer_options", {})
+    wrappers = options.setdefault("wrappers", {})
+    existing = wrappers.get(WrappersMP.OUTER_SAMPLE, {})
+    key = "oneko_hiresfix_tiles"
+    # Core merges ModelPatcher wrappers after transformer_options wrappers. Put
+    # noise preparation first so existing wrappers can still modify its result.
+    wrappers[WrappersMP.OUTER_SAMPLE] = {
+        key: [wrapper, *existing.get(key, [])],
+        **{name: callbacks for name, callbacks in existing.items() if name != key},
+    }
+    return patched
 
 
 def _load_ultimate_sd_upscale_no_upscale():

@@ -1,8 +1,10 @@
 # Auswahl für Oneko 0.1.0
 
+Dieses Dokument beschreibt die historische Startauswahl von **40 Nodes**. Seit Version **0.2.0** sind es durch fünf zusätzliche Nodes insgesamt **45**; die aktuelle Übersicht steht im [Node-Katalog](NODE_KATALOG.md).
+
 Grundlage ist die Installationsanalyse vom 08.09.2026. Auswahlkriterien: nachgewiesener Bedarf in erfolgreichen Run-Graphen oder gespeicherten Workflows, eigenständige Funktion, ein verständlicher Anschlussvertrag und vertretbare zusätzliche Abhängigkeiten. Auf ausdrücklichen Wunsch gehören Video und Audio bereits zur Startauswahl.
 
-## Warum 40 Nodes?
+## Warum zunächst 40 Nodes?
 
 Bild-/Promptfunktionen decken die bestehende Arbeit ab. Die neun Wan-Nodes bilden eine zusammenhängende Kette aus Planung, Latentvorbereitung, Manifesten, Speicherung und Zusammenbau; drei Audionodes decken Songvariation, zeitliches Conditioning und fertige Audiotracks ab. Diese Funktionen sind keine austauschbaren Varianten derselben Operation.
 
@@ -23,7 +25,7 @@ Die gemeinsame Noise-Implementierung bleibt erhalten. Für die Oberfläche genü
 | `NukunTiledHiResFixAdvanced` | 1 | USDU HiResFix und Core-basierter Pixel-Remaster decken die gewählten Startpfade ab. Ein zusätzlicher globaler Sampling-Eingriff entfällt. |
 | `NukunSpeedSampler` | 1 | Der aktuell verwendete externe `SamplerSPEED` bleibt separat. Keine Gleichwertigkeit durch bloßes Umbenennen behaupten. |
 
-Damit ergeben sich 58 − 18 = 40 eigene Registrierungen. Nichts davon deinstalliert oder verändert das Ausgangspaket.
+Damit ergaben sich für Version 0.1.0 zunächst 58 − 18 = 40 eigene Registrierungen. Nichts davon deinstalliert oder verändert das Ausgangspaket.
 
 ## Nicht aus Drittpaketen übernommen
 
