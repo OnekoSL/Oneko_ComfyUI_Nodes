@@ -1,17 +1,17 @@
-import numbers
-
 import torch
 
+from .clip_sculpt_core import eligible_entries
+from .conditioning_context import attach_conditioning_context, capture_conditioning_context
 from .embedding_sculpt_core import EmbeddingSculptSession
-from .t5_equal_length_balancer import SUPPORTED_TEXT_STREAM_KEYS
+from .t5_equal_length_balancer import (
+    MOSS_NATIVE_LENGTH_REPORT,
+    SUPPORTED_TEXT_STREAM_KEYS,
+    requires_native_text_lengths,
+)
 
 
 SCULPT_METHODS = ("forward", "backward", "maximum_absolute", "add_minimum_absolute")
 NORMALIZATION_MODES = ("none", "mean", "mean * attention")
-QWEN3VL_IM_START = 151644
-QWEN3VL_IM_END = 151645
-QWEN3VL_USER = 872
-QWEN3VL_NEWLINE = 198
 
 
 class OnekoT5SculptEqualLengthBalancer:
@@ -27,20 +27,20 @@ class OnekoT5SculptEqualLengthBalancer:
                         "min": 0,
                         "max": 4096,
                         "step": 1,
-                        "tooltip": "Minimum shared token length for positive and negative prompts.",
+                        "tooltip": "Minimum shared token length. MOSS keeps native prompt lengths and ignores this target.",
                     },
                 ),
                 "positive": ("STRING", {"multiline": True, "dynamicPrompts": True}),
                 "negative": ("STRING", {"multiline": True, "dynamicPrompts": True}),
                 "positive_intensity": (
                     "FLOAT",
-                    {"default": 0.35, "min": 0.0, "max": 5.0, "step": 0.01},
+                    {"default": 3.0, "min": 0.0, "max": 5.0, "step": 0.01},
                 ),
-                "positive_method": (SCULPT_METHODS, {"default": "forward"}),
-                "positive_normalization": (NORMALIZATION_MODES, {"default": "none"}),
+                "positive_method": (SCULPT_METHODS, {"default": "backward"}),
+                "positive_normalization": (NORMALIZATION_MODES, {"default": "mean * attention"}),
                 "negative_intensity": (
                     "FLOAT",
-                    {"default": 0.0, "min": 0.0, "max": 5.0, "step": 0.01},
+                    {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.01},
                 ),
                 "negative_method": (SCULPT_METHODS, {"default": "forward"}),
                 "negative_normalization": (NORMALIZATION_MODES, {"default": "mean"}),
@@ -72,7 +72,8 @@ class OnekoT5SculptEqualLengthBalancer:
     CATEGORY = "Oneko/03 Conditioning/Encode"
     DESCRIPTION = (
         "Encodes positive and negative prompts with equal T5/Qwen token length, "
-        "optionally sculpting eligible text token embeddings before scheduled encoding."
+        "optionally sculpting eligible text token embeddings before scheduled encoding. "
+        "MOSS keeps native lengths while still allowing sculpting of user text."
     )
 
     def _set_text_stream_options(self, clip, min_length=None, min_padding=None):
@@ -156,41 +157,8 @@ class OnekoT5SculptEqualLengthBalancer:
         session = EmbeddingSculptSession(all_weights, [token_id], top_k)
         return session.sculpt(token_id, method, intensity)
 
-    def _qwen3vl_user_content_range(self, batch):
-        token_ids = [
-            int(entry[0]) if len(entry) >= 1 and isinstance(entry[0], numbers.Integral) else None
-            for entry in batch
-        ]
-        marker = (QWEN3VL_IM_START, QWEN3VL_USER, QWEN3VL_NEWLINE)
-        for index in range(len(token_ids) - len(marker) + 1):
-            if tuple(token_ids[index : index + len(marker)]) != marker:
-                continue
-            content_start = index + len(marker)
-            try:
-                content_end = token_ids.index(QWEN3VL_IM_END, content_start)
-            except ValueError:
-                return None
-            return content_start, content_end
-        return None
-
-    def _eligible_entries(self, tokens, stream_key, special_ids):
-        coords = []
-        for batch_index, batch in enumerate(tokens[stream_key]):
-            content_range = None
-            if stream_key.startswith("qwen3vl_"):
-                content_range = self._qwen3vl_user_content_range(batch)
-            for token_index, token_weight in enumerate(batch):
-                if content_range is not None and not content_range[0] <= token_index < content_range[1]:
-                    continue
-                if len(token_weight) < 2:
-                    continue
-                token_id = token_weight[0]
-                if not isinstance(token_id, numbers.Integral):
-                    continue
-                if int(token_id) in special_ids:
-                    continue
-                coords.append((batch_index, token_index, int(token_id)))
-        return coords
+    def _eligible_entries(self, tokens, stream_key, special_ids, clip=None):
+        return eligible_entries(tokens, stream_key, special_ids, clip=clip)
 
     def _apply_sculpting(
         self,
@@ -288,19 +256,26 @@ class OnekoT5SculptEqualLengthBalancer:
         positive_raw_count = self._token_count(raw_positive_tokens, stream_key)
         negative_raw_count = self._token_count(raw_negative_tokens, stream_key)
         requested_target = max(0, int(target))
-        effective_target = max(requested_target, positive_raw_count, negative_raw_count)
-
-        encoder = tokenizer.clone()
-        self._set_text_stream_options(encoder, min_padding=0)
-        encoder.set_tokenizer_option(f"{stream_key}_min_length", effective_target)
+        native_lengths = requires_native_text_lengths(tokenizer)
+        effective_target = max(positive_raw_count, negative_raw_count)
+        if native_lengths:
+            encoder = measure
+            positive_tokens = raw_positive_tokens
+            negative_tokens = raw_negative_tokens
+        else:
+            effective_target = max(requested_target, effective_target)
+            encoder = tokenizer.clone()
+            self._set_text_stream_options(encoder, min_padding=0)
+            encoder.set_tokenizer_option(f"{stream_key}_min_length", effective_target)
+            positive_tokens = encoder.tokenize(positive)
+            negative_tokens = encoder.tokenize(negative)
+        positive_context = capture_conditioning_context(encoder, positive_tokens)
+        negative_context = capture_conditioning_context(encoder, negative_tokens)
         submodel = self._get_text_submodel(encoder, stream_key)
 
-        positive_tokens = encoder.tokenize(positive)
-        negative_tokens = encoder.tokenize(negative)
-
         special_ids = self._special_token_ids(submodel)
-        positive_coords = self._eligible_entries(positive_tokens, stream_key, special_ids)
-        negative_coords = self._eligible_entries(negative_tokens, stream_key, special_ids)
+        positive_coords = self._eligible_entries(positive_tokens, stream_key, special_ids, clip=encoder)
+        negative_coords = self._eligible_entries(negative_tokens, stream_key, special_ids, clip=encoder)
         search_ids = []
         if float(positive_intensity) > 0:
             search_ids.extend(token_id for _batch, _index, token_id in positive_coords)
@@ -335,8 +310,12 @@ class OnekoT5SculptEqualLengthBalancer:
             coords=negative_coords,
         )
 
-        cond_positive = encoder.encode_from_tokens_scheduled(positive_tokens)
-        cond_negative = encoder.encode_from_tokens_scheduled(negative_tokens)
+        cond_positive = attach_conditioning_context(
+            encoder.encode_from_tokens_scheduled(positive_tokens), positive_context
+        )
+        cond_negative = attach_conditioning_context(
+            encoder.encode_from_tokens_scheduled(negative_tokens), negative_context
+        )
 
         report = (
             f"text stream: {stream_key}; "
@@ -352,6 +331,14 @@ class OnekoT5SculptEqualLengthBalancer:
             f"negative normalization: {negative_normalization}; "
             f"top_k: {int(top_k)}; {session.report()}"
         )
+
+        if native_lengths:
+            report += MOSS_NATIVE_LENGTH_REPORT
+
+        if stream_key.startswith(("qwen35_", "qwen3vl_")):
+            report += "; chat protection: complete user turns only; unrecognized/incomplete chat skipped"
+        if stream_key == "qwen35_9b":
+            report += "; raw counts include chat template, exclude added padding"
 
         return (
             cond_positive,

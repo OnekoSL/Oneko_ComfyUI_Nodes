@@ -3,6 +3,8 @@ from copy import deepcopy
 import torch
 import torch.nn.functional as F
 
+from .conditioning_context import CONDITIONING_CONTEXT_KEY, conditioning_fingerprint
+
 
 PRESETS = [
     "neutral_report_only",
@@ -17,6 +19,7 @@ MODEL_PROFILES = [
     "t5",
     "sdxl_clip",
     "sd15_clip",
+    "moss_image",
 ]
 
 PRESET_PARAMS = {
@@ -32,6 +35,9 @@ PROFILE_SCALES = {
     "sd15_clip": {"center": 0.45, "contrast": 0.45, "smooth": 0.65, "spike": 0.55},
     "generic": {"center": 0.40, "contrast": 0.40, "smooth": 0.55, "spike": 0.50},
 }
+
+# Start with the existing conservative scaling; this is not a quality optimum.
+PROFILE_SCALES["moss_image"] = dict(PROFILE_SCALES["generic"])
 
 
 def _conditioning_report(conditioning, title, profile_request="auto", rms_pairs=None):
@@ -77,6 +83,12 @@ def _conditioning_report(conditioning, title, profile_request="auto", rms_pairs=
         if index in rms_pairs:
             before, after = rms_pairs[index]
             lines.append(f"[{index}] rms before/after: {before:.6g} / {after:.6g}")
+        if profile == "moss_image":
+            try:
+                mask = _moss_mask(work, meta)
+                lines.append(f"[{index}] MOSS user-token context: editable {sum(mask)}; protected {len(mask) - sum(mask)}")
+            except ValueError as error:
+                lines.append(f"[{index}] warning: {error}")
         if profile_warning:
             lines.append(f"[{index}] warning: {profile_warning}")
 
@@ -95,8 +107,15 @@ def _rms(tensor):
 
 
 def _resolve_model_profile(tensor, meta, profile_request):
+    context = meta.get(CONDITIONING_CONTEXT_KEY) if isinstance(meta, dict) else None
+    moss_context = isinstance(context, dict) and context.get("model_profile") == "moss_image"
     if profile_request != "auto":
-        return profile_request, "explicit", ""
+        warning = ""
+        if moss_context and profile_request != "moss_image":
+            warning = "MOSS encoder context requires auto or moss_image for protected adjustment."
+        return profile_request, "explicit", warning
+    if moss_context:
+        return "moss_image", "oneko_encoder", ""
 
     channels = tensor.shape[-1] if torch.is_tensor(tensor) and tensor.ndim >= 1 else None
     if channels == 768:
@@ -112,7 +131,11 @@ def _resolve_model_profile(tensor, meta, profile_request):
         )
 
     if channels in (2560, 4096):
-        return "t5", "auto_conservative", f"common T5-like channel dim detected ({channels})."
+        return (
+            "t5", "legacy_shape_heuristic",
+            f"Ambiguous {channels}-channel conditioning; preserving legacy T5-like scaling, "
+            "not identifying the model family. For MOSS use a Oneko encoder with user-token context.",
+        )
 
     return "generic", "fallback", f"unrecognized channel dim ({channels}); using conservative generic scaling."
 
@@ -193,6 +216,80 @@ def _apply_preset(tensor, preset, strength, model_profile):
     return tensor
 
 
+def _moss_mask(tensor, meta):
+    context = meta.get(CONDITIONING_CONTEXT_KEY) if isinstance(meta, dict) else None
+    guidance = (
+        "MOSS Conditioning Adjust requires verified user-token context from a Oneko encoder. "
+        "Use CLIP Sculpt Text Encode (intensity 0, normalization none), a Oneko Balancer, "
+        "or a Oneko Regional encoder before Adjust."
+    )
+    if not isinstance(context, dict) or context.get("version") != 1 or context.get("model_profile") != "moss_image":
+        raise ValueError(guidance)
+    mask = context.get("token_mask")
+    if (
+        not torch.is_tensor(tensor) or tensor.ndim != 3
+        or not isinstance(mask, (tuple, list))
+        or any(type(value) is not bool for value in mask)
+        or len(mask) != tensor.shape[1]
+        or context.get("token_count") != tensor.shape[1]
+    ):
+        detail = context.get("warning") or "Token context does not match the conditioning shape."
+        raise ValueError(f"{guidance} {detail}")
+    if context.get("source_fingerprint") != conditioning_fingerprint(tensor):
+        raise ValueError(
+            "MOSS conditioning was changed after its user-token context was captured. "
+            "Place Adjust directly after a Oneko encoder or another protected Adjust, "
+            "before mixing or concatenating different prompts."
+        )
+    return tuple(mask)
+
+
+def _mask_runs(mask):
+    runs = []
+    start = None
+    for index, active in enumerate((*mask, False)):
+        if active and start is None:
+            start = index
+        elif not active and start is not None:
+            runs.append((start, index))
+            start = None
+    return runs
+
+
+def _adjust_moss_tensor(tensor, mask, preset, strength, preserve_magnitude):
+    # Work only on post-encoder user rows. Neither normalization nor smoothing
+    # may cross the protected chat/special-token rows.
+    output = tensor.clone()
+    if not any(mask):
+        return output, []
+    params = PRESET_PARAMS[preset]
+    scales = PROFILE_SCALES["moss_image"]
+    strength = float(max(0.0, min(2.0, strength)))
+    indices = torch.tensor(mask, dtype=torch.bool, device=tensor.device)
+    runs = _mask_runs(mask)
+    rms_pairs = []
+    for batch_index in range(tensor.shape[0]):
+        work = tensor[batch_index:batch_index + 1, indices, :].float()
+        before = _rms(work)
+        work = _center_channels(work, params["center"] * scales["center"] * strength)
+        offset = 0
+        for start, end in runs:
+            count = end - start
+            work[:, offset:offset + count] = _smooth_token_norms(
+                work[:, offset:offset + count],
+                params["smooth"] * scales["smooth"] * strength,
+            )
+            offset += count
+        work = _tame_spikes(work, params["spike"] * scales["spike"] * strength)
+        work = _adjust_token_contrast(work, params["contrast"] * scales["contrast"] * strength)
+        if preserve_magnitude:
+            work = work * (before / _rms(work))
+        converted = work.to(dtype=tensor.dtype)
+        output[batch_index:batch_index + 1, indices, :] = converted
+        rms_pairs.append((before.item(), _rms(converted).item()))
+    return output, rms_pairs
+
+
 class OnekoConditioningAnalyzer:
     @classmethod
     def INPUT_TYPES(cls):
@@ -215,10 +312,10 @@ class OnekoConditioningAdjust:
             "required": {
                 "conditioning": ("CONDITIONING",),
                 "preset": (PRESETS, {"default": "literal_detail"}),
-                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01}),
-                "preserve_magnitude": ("BOOLEAN", {"default": True}),
+                "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "tooltip": "Preset amount. Zero is neutral; all MOSS presets preserve protected chat rows."}),
+                "preserve_magnitude": ("BOOLEAN", {"default": True, "tooltip": "Preserve RMS. For MOSS: per image over editable user rows only; not a bypass."}),
                 "enabled": ("BOOLEAN", {"default": True}),
-                "model_profile": (MODEL_PROFILES, {"default": "auto"}),
+                "model_profile": (MODEL_PROFILES, {"default": "auto", "tooltip": "auto recognizes MOSS from Oneko encoder context. Untagged conditioning retains legacy shape heuristics; it cannot reliably identify MOSS."}),
             }
         }
 
@@ -226,7 +323,7 @@ class OnekoConditioningAdjust:
     RETURN_TYPES = ("CONDITIONING", "STRING")
     RETURN_NAMES = ("conditioning", "report")
     CATEGORY = "Oneko/03 Conditioning/Transform"
-    DESCRIPTION = "Deterministic preset-based conditioning reshaping for gentle detail, balance, and spike control."
+    DESCRIPTION = "Deterministic conditioning presets. MOSS from Oneko encoders edits user text only, preserving chat rows and native token lengths."
 
     def adjust(self, conditioning, preset, strength, preserve_magnitude, enabled, model_profile="auto"):
         output = _clone_conditioning(conditioning)
@@ -238,6 +335,11 @@ class OnekoConditioningAdjust:
             )
             return (output, report)
 
+        if preset not in PRESET_PARAMS:
+            raise ValueError(f"Unknown Oneko conditioning preset: {preset}")
+        if model_profile not in MODEL_PROFILES:
+            raise ValueError(f"Unknown Oneko conditioning model profile: {model_profile}")
+        protected_reports = []
         rms_pairs = {}
         for index, entry in enumerate(output):
             tensor = entry[0]
@@ -247,15 +349,27 @@ class OnekoConditioningAdjust:
             original_dtype = tensor.dtype
             original_rms = _rms(tensor)
             profile, _, _ = _resolve_model_profile(tensor, entry[1], model_profile)
-            work = tensor.float()
-            work = _apply_preset(work, preset, strength, profile)
-
-            if preserve_magnitude:
-                adjusted_rms = _rms(work)
-                if adjusted_rms > 0:
-                    work = work * (original_rms / adjusted_rms)
-
-            output[index][0] = work.to(dtype=original_dtype)
+            context_present = isinstance(entry[1], dict) and CONDITIONING_CONTEXT_KEY in entry[1]
+            if context_present or profile == "moss_image":
+                mask = _moss_mask(tensor, entry[1])
+                if profile != "moss_image":
+                    raise ValueError("MOSS encoder context requires model_profile auto or moss_image.")
+                output[index][0], selected_rms = _adjust_moss_tensor(
+                    tensor, mask, preset, strength, preserve_magnitude,
+                )
+                entry[1][CONDITIONING_CONTEXT_KEY]["source_fingerprint"] = conditioning_fingerprint(output[index][0])
+                protected_reports.append(
+                    f"[{index}] MOSS user text only; editable: {sum(mask)}; protected: {len(mask) - sum(mask)}; "
+                    f"editable RMS per batch before/after: {selected_rms}"
+                )
+            else:
+                work = tensor.float()
+                work = _apply_preset(work, preset, strength, profile)
+                if preserve_magnitude:
+                    adjusted_rms = _rms(work)
+                    if adjusted_rms > 0:
+                        work = work * (original_rms / adjusted_rms)
+                output[index][0] = work.to(dtype=original_dtype)
             rms_pairs[index] = (original_rms.item(), _rms(output[index][0]).item())
 
         report = _conditioning_report(
@@ -264,6 +378,8 @@ class OnekoConditioningAdjust:
             model_profile,
             rms_pairs,
         )
+        if protected_reports:
+            report += "\n" + "\n".join(protected_reports)
         return (output, report)
 
 

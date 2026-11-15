@@ -1,0 +1,641 @@
+{
+  "id": "b356ab43-5217-4f44-a8f1-a1716eb3ccab",
+  "revision": 0,
+  "last_node_id": 10,
+  "last_link_id": 11,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "OnekoDiffusionClipVaeCyclerLoader",
+      "pos": [
+        40,
+        320
+      ],
+      "size": [
+        430,
+        440
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "slot_index": 1,
+          "links": [
+            2,
+            3
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "slot_index": 2,
+          "links": [
+            8
+          ]
+        },
+        {
+          "name": "modelname",
+          "type": "STRING",
+          "slot_index": 3,
+          "links": []
+        },
+        {
+          "name": "filename_modelname",
+          "type": "STRING",
+          "slot_index": 4,
+          "links": []
+        },
+        {
+          "name": "unet_name",
+          "type": "STRING",
+          "slot_index": 5,
+          "links": []
+        },
+        {
+          "name": "clip_name",
+          "type": "STRING",
+          "slot_index": 6,
+          "links": []
+        },
+        {
+          "name": "vae_name",
+          "type": "STRING",
+          "slot_index": 7,
+          "links": []
+        },
+        {
+          "name": "folder",
+          "type": "STRING",
+          "slot_index": 8,
+          "links": []
+        }
+      ],
+      "title": "1 — MOSS: Modell, Textencoder und VAE",
+      "properties": {
+        "Node name for S&R": "OnekoDiffusionClipVaeCyclerLoader"
+      },
+      "widgets_values": [
+        "moss_image_sft_int8_convrot.safetensors",
+        "fixed",
+        "",
+        "qwen3.5_9b_w4a8_gptq.safetensors",
+        "flux2-vae_small.safetensors",
+        "default",
+        "moss_image",
+        "default"
+      ],
+      "showAdvanced": true,
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 2,
+      "type": "OnekoCLIPSculptTextEncode",
+      "pos": [
+        540,
+        320
+      ],
+      "size": [
+        450,
+        350
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "2 — Positiv: neutrales Oneko-Encoding",
+      "properties": {
+        "Node name for S&R": "OnekoCLIPSculptTextEncode"
+      },
+      "widgets_values": [
+        "An ancient library inside a huge hollow tree in a misty fantasy forest. Warm brass lanterns illuminate curved wooden shelves filled with books. Blue fireflies drift between the roots, and luminous mushrooms grow beside a narrow footbridge. Moonlight filters through the canopy. Intricate wood textures, atmospheric depth, painterly fantasy illustration.",
+        0,
+        "forward",
+        "none",
+        64
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 3,
+      "type": "OnekoCLIPSculptTextEncode",
+      "pos": [
+        540,
+        760
+      ],
+      "size": [
+        450,
+        280
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "3 — Negativ: neutrales Oneko-Encoding",
+      "properties": {
+        "Node name for S&R": "OnekoCLIPSculptTextEncode"
+      },
+      "widgets_values": [
+        "worst quality, bad anatomy, watermark, jpeg artifact",
+        0,
+        "forward",
+        "none",
+        64
+      ],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 4,
+      "type": "OnekoEmptyLatentAspectRatio",
+      "pos": [
+        40,
+        850
+      ],
+      "size": [
+        430,
+        330
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            6
+          ]
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "slot_index": 1,
+          "links": []
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "slot_index": 2,
+          "links": []
+        }
+      ],
+      "title": "4 — MOSS-Latent: 1024 × 1536",
+      "properties": {
+        "Node name for S&R": "OnekoEmptyLatentAspectRatio"
+      },
+      "widgets_values": [
+        "2:3 (Portrait Photo)",
+        1.5,
+        1024,
+        1536,
+        false,
+        1,
+        "MOSS / FLUX.2",
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "type": "OnekoUniversalKSampler",
+      "pos": [
+        1490,
+        320
+      ],
+      "size": [
+        365,
+        590
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 10
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 11
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "slot_index": 1,
+          "links": []
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "slot_index": 2,
+          "links": []
+        }
+      ],
+      "title": "7 — Oneko-Sampling: Seed festhalten",
+      "properties": {
+        "Node name for S&R": "OnekoUniversalKSampler"
+      },
+      "widgets_values": [
+        11261113,
+        "fixed",
+        25,
+        2.5,
+        "euler",
+        "simple",
+        1,
+        true,
+        "auto",
+        "gaussian",
+        1,
+        0.35,
+        "default"
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 6,
+      "type": "VAEDecode",
+      "pos": [
+        1920,
+        320
+      ],
+      "size": [
+        500,
+        90
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            9
+          ]
+        }
+      ],
+      "title": "8 — VAE Decode",
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 7,
+      "type": "SaveImage",
+      "pos": [
+        1920,
+        510
+      ],
+      "size": [
+        500,
+        600
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 9
+        }
+      ],
+      "outputs": [],
+      "title": "9 — Bild speichern",
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "Oneko/MOSS_Conditioning_Adjust"
+      ]
+    },
+    {
+      "id": 8,
+      "type": "MarkdownNote",
+      "pos": [
+        40,
+        20
+      ],
+      "size": [
+        2380,
+        250
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "MOSS — Conditioning Adjust: Presets vergleichen",
+      "properties": {
+        "Node name for S&R": "MarkdownNote"
+      },
+      "widgets_values": [
+        "# MOSS: Conditioning Adjust\nIm Loader die installierten Modell-, Textencoder- und VAE-Dateien wählen; **clip_type = moss_image**. Die beiden Oneko-Encoder bleiben hier neutral: **Intensität 0 / Normalisierung none**. Sie liefern die MOSS-Nutzertokenmaske für Adjust.\n\n**Alle Presets:** neutral_report_only (unverändert), literal_detail (mehr Unterschiede zwischen Tokenstärken), soft_balance (glätten und ausgleichen), contrast_pop (Unterschiede stärker betonen), negative_tamer (Normspitzen dämpfen). Diese Namen garantieren keine bestimmte Bildqualität.\n\n**Vergleich:** Bei festem Seed zunächst beide Adjust-Nodes auf **neutral_report_only** stellen; danach nur ein Preset verändern. Stärke 0 oder enabled=false sind ebenfalls neutral. **preserve_magnitude=true ist kein Bypass** und schwächt den Negativprompt nicht pauschal ab.\n\n**model_profile=auto** erkennt MOSS aus den Oneko-Encoder-Metadaten. Chat-/Thinking-/Sondertoken bleiben geschützt. Ein nativer Core-Textencoder liefert diese Zusatzinformationen nicht.\n\nAdjust vor nachträglichen Vektormischungen oder Umordnungen einsetzen. Die Tokenmaske ist an die konkreten Textvektoren gebunden; direkt verkettete Adjust-Nodes bleiben möglich."
+      ],
+      "color": "#222",
+      "bgcolor": "#000"
+    },
+    {
+      "id": 9,
+      "type": "OnekoConditioningAdjust",
+      "pos": [
+        1060,
+        320
+      ],
+      "size": [
+        360,
+        250
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "5 — Positiv: Conditioning Adjust",
+      "properties": {
+        "Node name for S&R": "OnekoConditioningAdjust"
+      },
+      "widgets_values": [
+        "literal_detail",
+        1,
+        true,
+        true,
+        "auto"
+      ],
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 10,
+      "type": "OnekoConditioningAdjust",
+      "pos": [
+        1060,
+        760
+      ],
+      "size": [
+        360,
+        250
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            11
+          ]
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "slot_index": 1,
+          "links": []
+        }
+      ],
+      "title": "6 — Negativ: Conditioning Adjust",
+      "properties": {
+        "Node name for S&R": "OnekoConditioningAdjust"
+      },
+      "widgets_values": [
+        "negative_tamer",
+        1,
+        true,
+        true,
+        "auto"
+      ],
+      "color": "#322",
+      "bgcolor": "#533"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
+      0,
+      "CLIP"
+    ],
+    [
+      3,
+      1,
+      1,
+      3,
+      0,
+      "CLIP"
+    ],
+    [
+      4,
+      2,
+      0,
+      9,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      5,
+      3,
+      0,
+      10,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      6,
+      4,
+      0,
+      5,
+      3,
+      "LATENT"
+    ],
+    [
+      7,
+      5,
+      0,
+      6,
+      0,
+      "LATENT"
+    ],
+    [
+      8,
+      1,
+      2,
+      6,
+      1,
+      "VAE"
+    ],
+    [
+      9,
+      6,
+      0,
+      7,
+      0,
+      "IMAGE"
+    ],
+    [
+      10,
+      9,
+      0,
+      5,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      11,
+      10,
+      0,
+      5,
+      2,
+      "CONDITIONING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.52,
+      "offset": [
+        35,
+        40
+      ]
+    },
+    "frontendVersion": "1.59.1"
+  },
+  "version": 0.4
+}

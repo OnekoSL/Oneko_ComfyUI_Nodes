@@ -2,8 +2,9 @@ import hashlib
 import math
 import struct
 
-import torch
+from comfy.ldm.modules.diffusionmodules.openaimodel import UNetModel
 
+from .block_noise_core import _sigma_is_active, _sigma_value, add_feature_noise
 from .noise_sampler_core import NOISE_TYPES, generate_oneko_noise_for_tensor
 
 
@@ -126,7 +127,10 @@ class OnekoUNetBlockNoisePatch:
     RETURN_NAMES = ("model",)
     FUNCTION = "patch"
     CATEGORY = "Oneko/09 Model Patches"
-    DESCRIPTION = "Experimental UNet patch that injects independent noise into input, middle, and output block groups."
+    DESCRIPTION = (
+        "Experimental UNet patch that injects independent noise into input, middle, and output block groups. "
+        "Requires a Core UNetModel (e.g. SD1/SD2/SDXL); MOSS and other DiT models are not supported."
+    )
 
     def patch(
         self,
@@ -144,6 +148,7 @@ class OnekoUNetBlockNoisePatch:
         output_noise_seed,
     ):
         _require_block_patch_api(model)
+        _require_unet_architecture(model)
         model_sampling = model.get_model_object("model_sampling")
         sigma_start = model_sampling.percent_to_sigma(start_percent)
         sigma_end = model_sampling.percent_to_sigma(end_percent)
@@ -216,6 +221,22 @@ def _require_block_patch_api(model):
         raise ValueError("Model does not support UNet block noise patches: {}".format(", ".join(missing)))
 
 
+def _require_unet_architecture(model):
+    try:
+        diffusion_model = model.get_model_object("diffusion_model")
+    except (AttributeError, KeyError) as error:
+        raise ValueError(
+            "UNet Block Noise requires a model with a Core UNetModel diffusion_model."
+        ) from error
+    if not isinstance(diffusion_model, UNetModel):
+        architecture = type(diffusion_model).__name__
+        raise ValueError(
+            f"UNet Block Noise does not support {architecture}. "
+            "It requires a Core UNetModel (e.g. SD1/SD2/SDXL) with input/middle/output block hooks. "
+            "MOSS and other DiT models do not use these UNet hooks; bypass this node for them."
+        )
+
+
 def _inject_block_noise(
     tensor,
     transformer_options,
@@ -232,30 +253,7 @@ def _inject_block_noise(
 
     seed = _derive_noise_seed(base_seed, group, _block_index(transformer_options), _sigma_value(transformer_options))
     noise = generate_oneko_noise_for_tensor(tensor, seed, noise_type, 1.0)
-    feature_scale = _feature_magnitude(tensor)
-    noise = noise.to(dtype=feature_scale.dtype, device=tensor.device)
-    noise = noise * feature_scale * float(noise_strength) * float(group_scale)
-    return tensor + noise.to(dtype=tensor.dtype)
-
-
-def _sigma_is_active(transformer_options, sigma_start, sigma_end):
-    sigma = _sigma_value(transformer_options)
-    low = min(float(sigma_start), float(sigma_end))
-    high = max(float(sigma_start), float(sigma_end))
-    return low <= sigma <= high
-
-
-def _sigma_value(transformer_options):
-    sigmas = transformer_options.get("sigmas")
-    if sigmas is None:
-        return 0.0
-    if isinstance(sigmas, torch.Tensor):
-        if sigmas.numel() == 0:
-            return 0.0
-        return float(sigmas.reshape(-1)[0].detach().cpu().item())
-    if isinstance(sigmas, (list, tuple)):
-        return float(sigmas[0]) if sigmas else 0.0
-    return float(sigmas)
+    return add_feature_noise(tensor, noise, noise_strength, group_scale)
 
 
 def _block_index(transformer_options):
@@ -263,17 +261,6 @@ def _block_index(transformer_options):
     if isinstance(block, (list, tuple)) and len(block) > 1:
         return int(block[1])
     return 0
-
-
-def _feature_magnitude(tensor):
-    tensor_float = tensor.float()
-    if tensor_float.ndim <= 1:
-        magnitude = tensor_float.square().mean().sqrt()
-        return magnitude.clamp_min(1e-6)
-
-    dims = tuple(range(1, tensor_float.ndim))
-    magnitude = tensor_float.square().mean(dim=dims, keepdim=True).sqrt()
-    return magnitude.clamp_min(1e-6)
 
 
 def _group_noise_scales(model):

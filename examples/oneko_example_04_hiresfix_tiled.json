@@ -538,7 +538,7 @@
         1024,
         48,
         160,
-        true,
+        false,
         true,
         0.7,
         true,

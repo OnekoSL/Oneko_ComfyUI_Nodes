@@ -29,7 +29,7 @@ PROMPT_MODES = ("strict", "creative")
 DEFAULT_PROMPT_MODE = "strict"
 CREATIVE_MIN_TEMPERATURE = 0.8
 CREATIVE_MIN_TOP_P = 0.95
-NATURAL_FALLBACK_PROFILES = frozenset(("anima", "krea2", "z_image", "wan2_2_video"))
+NATURAL_FALLBACK_PROFILES = frozenset(("anima", "krea2", "z_image", "wan2_2_video", "moss_image"))
 SPLIT_BASE_WORD_RANGE = (10, 20)
 SPLIT_DETAIL_WORD_RANGE = (36, 40)
 Z_IMAGE_POSITIVE_WORD_RANGE = (300, 360)
@@ -54,9 +54,9 @@ NATURAL_SUBJECT_FIRST_GUIDANCE = """Shared subject-first content order for Krea 
 - If legible text is requested, quote the exact text in double quotation marks and name the sign, screen, garment, page, label, or other surface carrying it.
 - Treat UI, posters, diagrams, and graphic design as visual subjects. Describe their central element first, then typography, color, relative size, decoration, and exact placement without switching to a separate output mode.
 - Write one or two cohesive paragraphs of vivid, readable English rather than a mechanical keyword list."""
-TARGET_PROFILES = ("pony_v6", "illustrious", "pony_v7", "z_image", "anima", "wan2_2_video", "krea2")
+TARGET_PROFILES = ("pony_v6", "illustrious", "pony_v7", "z_image", "anima", "wan2_2_video", "krea2", "moss_image")
 DEFAULT_TARGET_PROFILE = "pony_v7"
-SPATIAL_TARGET_PROFILES = frozenset(("pony_v7", "z_image", "anima", "wan2_2_video", "krea2"))
+SPATIAL_TARGET_PROFILES = frozenset(("pony_v7", "z_image", "anima", "wan2_2_video", "krea2", "moss_image"))
 SPATIAL_INPUT_KEYS = ("left", "right", "top", "bottom")
 ANIMA_SPATIAL_NEGATIVE_TERMS = (
     "duplicate subject",
@@ -234,6 +234,7 @@ MODEL_LABEL_PATTERN = re.compile(r"\bpony[\s_-]+v?\d+\b", re.IGNORECASE)
 MODEL_VERSION_LEAK_PATTERN = re.compile(r"\b(character|subject)[\s:_-]+v?\d+(?:_sdxl)?\b", re.IGNORECASE)
 
 NEGATIVE_BASELINES = {
+    "moss_image": (),  # Optional negatives; do not add unwanted text/logo exclusions.
     "pony_v6": (
         "low quality",
         "worst quality",
@@ -1320,8 +1321,20 @@ def _prompt_mode_sampling(prompt_mode, temperature, top_p):
     return temperature, top_p
 
 
-def _prompt_system_instructions(prompt_mode):
-    return SYSTEM_INSTRUCTIONS + "\n\n" + _prompt_mode_instructions(prompt_mode)
+MOSS_SYSTEM_INSTRUCTIONS = """You are a precise image-caption editor for MOSS-Image.
+Return only valid JSON with exactly these string keys: base_prompt, foreground_prompt, background_prompt, negative, report.
+Preserve the user's subjects, exact counts, spatial relationships, actions, exclusions, medium, style, and fixed requirements.
+Use natural English descriptive prose, with the main subject first. Keep requested visible lettering verbatim in its original language, including punctuation, capitalization, and line breaks.
+A quoted style instruction or reference is not automatically visible text. Do not add signs or lettering that the user did not request.
+Use only the detail needed for this scene. Do not pad to a word count or insert generic quality-tag chains.
+The negative content is optional; always include the negative key, with an empty string when nothing is excluded. If nonempty, use concise relevant exclusions; never forbid lettering or other content explicitly requested in the positive scene.
+Do not add explicit acts. Keep any adult source wording neutral and descriptive.
+Report one short sentence about the resulting prompt. Do not explain outside JSON."""
+
+
+def _prompt_system_instructions(prompt_mode, target_profile=DEFAULT_TARGET_PROFILE):
+    instructions = MOSS_SYSTEM_INSTRUCTIONS if _normalize_target_profile(target_profile) == "moss_image" else SYSTEM_INSTRUCTIONS
+    return instructions + "\n\n" + _prompt_mode_instructions(prompt_mode)
 
 
 def _planner_system_instructions(prompt_mode):
@@ -1484,7 +1497,11 @@ def _spatial_fallback_text(
             continue
         if existing_text and _spatial_region_is_integrated(key, values[key], existing_text):
             continue
-        detail = re.sub(r"[\s.!?;,]+$", "", re.sub(r"\s+", " ", values[key])).strip()
+        detail = (
+            _clean_moss_prose(values[key]).rstrip(".!?;, ")
+            if profile == "moss_image"
+            else re.sub(r"[\s.!?;,]+$", "", re.sub(r"\s+", " ", values[key])).strip()
+        )
         if not detail:
             continue
         if (
@@ -1517,9 +1534,18 @@ def _apply_spatial_result(
     top="",
     bottom="",
     fallback_mode=DEFAULT_FALLBACK_MODE,
+    *,
+    validate_visible_text=True,
 ):
     _positive, negative, report, base_prompt, foreground_prompt, background_prompt = result
     profile = _normalize_target_profile(target_profile)
+    if profile == "moss_image" and validate_visible_text:
+        try:
+            _validate_moss_visible_text(_positive, left, right, top, bottom)
+        except ValueError as error:
+            if _normalize_fallback_mode(fallback_mode) != "continue":
+                raise
+            report = f"{report}. {error}"
     has_spatial_input = any(_spatial_values(left, right, top, bottom).values())
     if profile == "anima" and has_spatial_input:
         negative = _with_anima_spatial_negative(negative)
@@ -1679,7 +1705,7 @@ def _with_negative_baseline(target_profile, value):
 
 
 def _strip_commas_for_profile(target_profile, value):
-    if _normalize_target_profile(target_profile) in ("pony_v7", "z_image", "anima", "wan2_2_video", "krea2"):
+    if _normalize_target_profile(target_profile) in ("pony_v7", "z_image", "anima", "wan2_2_video", "krea2", "moss_image"):
         return value
     return re.sub(r"\s+", " ", str(value).replace(",", " ")).strip()
 
@@ -1820,6 +1846,8 @@ def _anima_style_anchor_base_tags(style_anchor, limit=24):
 
 def _clean_report(report, target_profile, word_salad, style_anchor):
     report = re.sub(r"\s+", " ", str(report).replace(",", " ")).strip()
+    if _normalize_target_profile(target_profile) == "moss_image":
+        return "Built one MOSS-Image caption from the supplied scene and style requirements"
     lowered = report.lower()
     if lowered.startswith("built one ") or "parser detail:" in lowered:
         return report
@@ -1834,6 +1862,7 @@ def _clean_report(report, target_profile, word_salad, style_anchor):
         "anima": "Anima",
         "wan2_2_video": "Wan 2.2 video",
         "krea2": "Krea 2",
+        "moss_image": "MOSS-Image",
     }.get(_normalize_target_profile(target_profile), "selected profile")
     return f"Built one {profile_label} prompt from {core} and removed weak filler terms"
 
@@ -1866,7 +1895,7 @@ def _postprocess_result(
     negative = str(data["negative"]).strip()
     report = str(data["report"]).strip()
 
-    if not allow_equine:
+    if not allow_equine and target_profile != "moss_image":
         positive = _remove_model_name_leaks(positive)
         base_prompt = _remove_model_name_leaks(base_prompt)
         foreground_prompt = _remove_model_name_leaks(foreground_prompt)
@@ -1932,6 +1961,14 @@ def _postprocess_result(
             provided if any(provided.values()) else None,
             mode,
             trace,
+        )
+        positive = _join_positive_parts(target_profile, base_prompt, foreground_prompt, background_prompt)
+    elif target_profile == "moss_image":
+        provided = {"base_prompt": base_prompt, "foreground_prompt": foreground_prompt,
+                    "background_prompt": background_prompt}
+        base_prompt, foreground_prompt, background_prompt = _moss_prompt_parts(
+            positive if not any(provided.values()) else "", word_salad, style_anchor,
+            provided, mode, trace,
         )
         positive = _join_positive_parts(target_profile, base_prompt, foreground_prompt, background_prompt)
     elif target_profile == "wan2_2_video":
@@ -3120,6 +3157,106 @@ def _strip_natural_meta_opening(value):
     return NATURAL_META_OPENING_PATTERN.sub("", str(value), count=1).lstrip(" ,;:-")
 
 
+# MOSS uses caption prose. Keep quoted lettering opaque to all local cleanup.
+MOSS_QUOTED_PATTERN = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"|“[^”]*”|„[^“]*“', re.DOTALL)
+MOSS_TEXT_CARRIER_PATTERN = re.compile(
+    r"\b(?:signs?|labels?|posters?|banners?|billboards?|screens?|pages?|covers?|shirts?|captions?|headlines?|"
+    r"titles?|lettering|inscriptions?|texts?|words?|speech bubbles?|logos?|"
+    r"schild(?:er)?|aufschrift(?:en)?|schriftzug|schriftzuege|schriftzüge|beschriftung(?:en)?|plakate?|textzeilen?)\b", re.IGNORECASE
+)
+
+
+def _clean_moss_prose(value):
+    # Only normalize unquoted whitespace; never change punctuation or newlines in lettering.
+    pieces, cursor = [], 0
+    for match in MOSS_QUOTED_PATTERN.finditer(str(value)):
+        pieces.append(re.sub(r"\s+", " ", str(value)[cursor:match.start()]))
+        pieces.append(match.group(0))
+        cursor = match.end()
+    pieces.append(re.sub(r"\s+", " ", str(value)[cursor:]))
+    text = "".join(pieces).strip()
+    text = re.sub(r"^(?:base_prompt|foreground_prompt|background_prompt)\s*:\s*", "", text, flags=re.IGNORECASE)
+    return _strip_natural_meta_opening(text).strip()
+
+
+def _moss_visible_literals(*values):
+    literals = []
+    for value in values:
+        text = str(value)
+        for match in MOSS_QUOTED_PATTERN.finditer(text):
+            # A quoted style/reference instruction is not automatically image lettering.
+            prior_context = MOSS_QUOTED_PATTERN.sub(' QUOTED ', text[:match.start()])
+            before = re.split(r'[.!?]', prior_context)[-1][-180:]
+            after = text[match.end():match.end() + 120]
+            style_reference = re.search(
+                r"\b(?:style|mood|tone|reference|instruction|look)\s*(?:(?:of|is|as)\s*)?[:=]?\s*$|"
+                r"\b(?:inspired by|described as)\s*$", before, re.IGNORECASE
+            )
+            excluded_lettering = re.search(
+                r"\b(?:no|without|exclude|avoid)\s+(?:(?:any|visible|written|printed|rendered)\s+)*"
+                r"(?:text|lettering|inscriptions?|words?)\b", before, re.IGNORECASE
+            )
+            if excluded_lettering and re.search(
+                r"\b(?:except|but|other than|apart from)\b", before[excluded_lettering.end():], re.IGNORECASE
+            ):
+                excluded_lettering = None
+            if style_reference or excluded_lettering:
+                continue
+            quoted_on_surface = (
+                re.match(r"\s*(?:is\s+)?(?:written|printed|displayed|shown|engraved|painted|inscribed)\b", after, re.IGNORECASE)
+                and MOSS_TEXT_CARRIER_PATTERN.search(after)
+            )
+            if MOSS_TEXT_CARRIER_PATTERN.search(before) or quoted_on_surface:
+                literal = match.group(0)[1:-1]
+                if literal and literal not in literals:
+                    literals.append(literal)
+    return literals
+
+
+def _validate_moss_visible_text(result_text, *sources):
+    quoted_values = {match.group(0)[1:-1] for match in MOSS_QUOTED_PATTERN.finditer(str(result_text))}
+    missing = [literal for literal in _moss_visible_literals(*sources) if literal not in quoted_values]
+    if missing:
+        raise ValueError("MOSS visible text missing or changed: " + "; ".join(repr(value) for value in missing))
+
+
+def _moss_prompt_parts(value, word_salad, style_anchor, provided=None,
+                       fallback_mode=DEFAULT_FALLBACK_MODE, trace=None):
+    mode = _normalize_fallback_mode(fallback_mode)
+    trace = trace if trace is not None else {}
+    provided = provided or {}
+    anchor = str(style_anchor).strip()
+    raw_base = str(provided.get("base_prompt", "")).strip()
+    if anchor and raw_base.startswith(anchor):
+        base = " ".join(part for part in (anchor, _clean_moss_prose(raw_base[len(anchor):])) if part)
+    elif anchor and raw_base.rstrip(" .;,:!?").casefold() == anchor.rstrip(" .;,:!?").casefold():
+        # Restore a whole-anchor echo with changed case/punctuation, without duplicating it.
+        base = anchor
+    else:
+        base = _clean_moss_prose(raw_base)
+    # The fixed anchor is user-owned, including LoRA triggers and control-like visible text.
+    if anchor and not base.startswith(anchor):
+        base = " ".join(part for part in (anchor, base) if part)
+    foreground = _clean_moss_prose(provided.get("foreground_prompt", "") or value)
+    background = _clean_moss_prose(provided.get("background_prompt", ""))
+    parts = {"base": base, "foreground": foreground, "background": background}
+    for section, text in parts.items():
+        trace[section] = "preserved" if text else "missing"
+        if not text and mode == "strict":
+            raise ValueError(f"moss_image {section}_prompt is empty")
+    if not foreground and mode == "adaptive":
+        foreground = str(word_salad).strip()
+        trace["foreground"] = "rebuilt" if foreground else "missing"
+    joined = _join_positive_parts("moss_image", base, foreground, background)
+    try:
+        _validate_moss_visible_text(joined, word_salad, style_anchor)
+    except ValueError as error:
+        if mode != "continue":
+            raise
+        trace["moss_visible_text_warning"] = str(error)
+    return base, foreground, background
+
+
 def _clean_krea2_prose(value):
     quoted_text = []
 
@@ -3833,6 +3970,8 @@ def _clean_z_image_text(value):
 
 def _clean_natural_prose(target_profile, value):
     profile = _normalize_target_profile(target_profile)
+    if profile == "moss_image":
+        return _clean_moss_prose(value)
     if profile == "anima":
         return _clean_anima_prose(value)
     if profile in ("krea2", "z_image"):
@@ -4042,7 +4181,7 @@ def _needs_pony_v7_structure(prompt):
 
 def _join_positive_parts(target_profile, base_prompt, foreground_prompt, background_prompt):
     profile = _normalize_target_profile(target_profile)
-    if profile in ("z_image", "krea2"):
+    if profile in ("z_image", "krea2", "moss_image"):
         first_paragraph = str(foreground_prompt).strip()
         second_paragraph = " ".join(
             str(part).strip() for part in (background_prompt, base_prompt) if str(part).strip()
@@ -4190,6 +4329,8 @@ def _profile_positive_fallback(target_profile, word_salad, style_anchor, style_c
     core_terms = ", ".join(salad_terms) if salad_terms else "coherent anime subject, clean composition"
     anchor_prefix = f"{anchor}, " if anchor else ""
 
+    if target_profile == "moss_image":
+        return _join_positive_parts("moss_image", anchor, str(word_salad).strip(), "")
     if target_profile == "pony_v6":
         return f"score_9, score_8_up, score_7_up, {anchor_prefix}{core_terms}"
     if target_profile == "illustrious":
@@ -4289,6 +4430,8 @@ def _with_processing_report(result, stage, fallback_mode, trace=None, ignored_er
         f"{key}={actions.get(key, 'unchanged')}" for key in ("base", "foreground", "background")
     )
     detail = f"Ollama stage={stage}; fallback_mode={mode}; {action_text}"
+    if actions.get("moss_visible_text_warning"):
+        detail += "; " + actions["moss_visible_text_warning"]
     if ignored_error:
         detail += f"; ignored_error={re.sub(r'\s+', ' ', str(ignored_error)).strip()}"
     report = f"{str(report).rstrip(' .')}. {detail}." if report else detail + "."
@@ -4427,8 +4570,10 @@ def _local_fallback_result(
             ),
         }
         result = _postprocess_result(values, target_profile, fallback_source, style_anchor, style_cluster)
-    return _apply_spatial_result(result, target_profile, left, right, top, bottom, fallback_mode=fallback_mode)
-
+    return _apply_spatial_result(
+        result, target_profile, left, right, top, bottom, fallback_mode=fallback_mode,
+        validate_visible_text=False,  # Local fallback restores connected spatial fields.
+    )
 
 def _target_profile_instructions(target_profile, style_cluster):
     target_profile = _normalize_target_profile(target_profile)
@@ -4507,6 +4652,18 @@ def _target_profile_instructions(target_profile, style_cluster):
 - positive is built locally as at most two paragraphs: foreground_prompt first, then background_prompt and base_prompt together. The unchanged style anchor remains in base_prompt and therefore does not override the subject-first opening.
 - Do not use score_*, rating_*, style_cluster_*, source_*, masterpiece, best quality, section labels, candidate-list names, or generic prompt-engineering language.
 - negative must be a concise list of quality, anatomy, geometry, duplicate-subject, unreadable-text, watermark, logo, and compression failures to avoid."""
+    if target_profile == "moss_image":
+        return """Target profile: MOSS-Image (natural caption).
+- Write concrete natural English prose for one image; this node keeps its existing English language-normalization contract.
+- Start foreground_prompt directly with the main subject. Preserve the requested subjects, exact counts, actions, attributes, exclusions, medium, and style.
+- Make spatial relationships explicit in words: left/right, in front of, behind, beside, above/below, overlap, relative size, and which object holds or touches which other object. Keep connected spatial inputs tied to their intended objects.
+- background_prompt describes the supplied setting and object relationships; base_prompt describes the supplied medium, style, framing, light, and color. Keep a supplied style anchor unchanged at the beginning of base_prompt.
+- The combined positive is subject-first: foreground_prompt, followed by background_prompt and base_prompt. These are text sections of one composition, not separate panels or images.
+- Use only as much detail as the request needs. There is no fixed word-count target and no automatic minimum-length expansion. Keep minimalist scenes minimal; do not import another model's length budget or add unrelated objects to fill space.
+- If visible text is explicitly requested, preserve its exact spelling, original language, capitalization, punctuation, and line breaks. Quote that text and identify its carrier, such as a sign, label, screen, or page. A quoted style instruction or reference sentence is not automatically text to render.
+- Do not output bounding boxes, coordinates, layout JSON, chat-template tokens, field labels, or generic quality-tag chains inside the prompt strings. This profile uses caption mode, not MOSS Layout mode.
+- negative may be an empty string. Otherwise keep it concise and relevant to explicit exclusions or likely artifacts; do not automatically forbid requested text, lettering, logos, or watermarks.
+- Keep the requested JSON response fields; return no extra commentary."""
     if target_profile == "wan2_2_video":
         return """Target profile: Wan 2.2 TI2V-5B video.
 - Write concise natural English visual prose, not Danbooru tags or an image-quality keyword pile.
@@ -4593,6 +4750,13 @@ def _build_generation_prompt(
         if prompt_plan
         else ""
     )
+    field_rules = (
+        "- Fill every JSON field with a useful non-empty string, except negative may be empty for MOSS.\n"
+        "- If negative is supplied, describe exclusions without repeating the positive prompt or forbidding requested lettering."
+        if target_profile == "moss_image" else
+        "- Fill every JSON field with a useful non-empty string, except Z-Image negative which should be empty.\n"
+        "- Negative fields must describe things to avoid, not repeat the positive prompt. For Z-Image only, negative must be an empty string."
+    )
     return f"""Rewrite this random word salad into one model-specific image prompt set.
 
 {_target_profile_instructions(target_profile, style_cluster)}
@@ -4608,8 +4772,7 @@ Style anchor / fixed requirements:
 {plan_block}
 
 Important:
-- Fill every JSON field with a useful non-empty string, except Z-Image negative which should be empty.
-- Negative fields must describe things to avoid, not repeat the positive prompt. For Z-Image only, negative must be an empty string.
+{field_rules}
 - Do not treat Pony v6 or Pony v7 as animal subjects.
 - For Anima, keep the controlled base tag line first, then use 180 to 260 words of short natural sentences in subject-to-emotion order.
 - For Anima, do not use Pony v7/SDXL/Z-Image control language such as style_cluster_*, rating_explicit, or source_* tags.
@@ -4645,7 +4808,7 @@ def _build_repair_prompt(
 It must contain exactly these string keys:
 {", ".join(RESPONSE_KEYS)}
 Every value except negative must be a non-empty string.
-Negative fields must be real negative prompts unless the target instructions say the model uses no negative prompt.
+Negative fields must follow the target profile; MOSS permits an empty negative, and Z-Image requires one.
 {_target_profile_instructions(target_profile, style_cluster)}
 {_prompt_mode_instructions(prompt_mode)}
 {spatial_block}
@@ -4919,7 +5082,7 @@ def _local_pipeline_issues(
     if profile == "z_image":
         if str(negative).strip():
             issues.append("Z-Image negative must be empty")
-    elif not str(negative).strip():
+    elif profile != "moss_image" and not str(negative).strip():
         issues.append("negative prompt is empty")
 
     for element in _required_pipeline_elements(prompt_plan, style_anchor):
@@ -4976,9 +5139,16 @@ def _append_pipeline_report(result, detail):
     return tuple(values)
 
 
-def _with_language_report(result, detected_language, translation_required):
+def _with_language_report(result, detected_language, translation_required, target_profile=DEFAULT_TARGET_PROFILE):
     if detected_language == "not_checked":
         detail = "Language preprocessing skipped because no natural-language source field was connected"
+    elif _normalize_target_profile(target_profile) == "moss_image":
+        # The legacy language heuristic compares strings; it does not identify language.
+        detail = (
+            "Language preprocessing returned revised source fields for English normalization"
+            if translation_required else
+            "Language preprocessing returned the original source fields unchanged; source language was not independently verified"
+        )
     elif translation_required:
         detail = f"Language preprocessing detected {detected_language} and translated source text to English"
     else:
@@ -5254,7 +5424,7 @@ class OnekoOllamaPromptRefiner:
                 sampling_top_p,
                 timeout_seconds,
                 context_length,
-                system_instructions=_prompt_system_instructions(prompt_mode),
+                system_instructions=_prompt_system_instructions(prompt_mode, profile),
                 **generation_settings,
             )
             responses.append(("initial", raw_response))
@@ -5286,7 +5456,7 @@ class OnekoOllamaPromptRefiner:
                 1.0,
                 timeout_seconds,
                 context_length,
-                system_instructions=_prompt_system_instructions(prompt_mode),
+                system_instructions=_prompt_system_instructions(prompt_mode, profile),
                 **generation_settings,
             )
             responses.append(("repair", repair_response))
@@ -5322,7 +5492,7 @@ class OnekoOllamaPromptRefiner:
                 1.0,
                 timeout_seconds,
                 context_length,
-                system_instructions=_prompt_system_instructions(prompt_mode),
+                system_instructions=_prompt_system_instructions(prompt_mode, profile),
                 **generation_settings,
             )
             responses.append(("minimal", minimal_response))
@@ -5382,18 +5552,32 @@ class OnekoOllamaPromptRefiner:
         prompt_mode=DEFAULT_PROMPT_MODE,
     ):
         _validate_refiner_inputs(target_profile, word_salad, style_anchor, left, right, top, bottom)
-        language_inputs, detected_language, translation_required = _prepare_language_inputs(
-            word_salad,
-            left,
-            right,
-            top,
-            bottom,
-            ollama_url,
-            ollama_model,
-            seed,
-            timeout_seconds,
-            context_length,
-        )
+        language_error = None
+        try:
+            language_inputs, detected_language, translation_required = _prepare_language_inputs(
+                word_salad,
+                left,
+                right,
+                top,
+                bottom,
+                ollama_url,
+                ollama_model,
+                seed,
+                timeout_seconds,
+                context_length,
+            )
+            if _normalize_target_profile(target_profile) == "moss_image":
+                try:
+                    original_fields = _language_source_values(word_salad, left, right, top, bottom)
+                    for key, original in original_fields.items():
+                        _validate_moss_visible_text(language_inputs[key], original)
+                except ValueError as error:
+                    raise RuntimeError(f"MOSS language preprocessing changed visible text: {error}") from error
+        except RuntimeError as error:
+            if _normalize_fallback_mode(fallback_mode) == "strict":
+                raise
+            language_inputs = _language_source_values(word_salad, left, right, top, bottom)
+            language_error = str(error)
         result = self._refine_canonical(
             language_inputs["word_salad"],
             ollama_url,
@@ -5414,7 +5598,13 @@ class OnekoOllamaPromptRefiner:
             pipeline_mode,
             prompt_mode,
         )
-        return _with_language_report(result, detected_language, translation_required)
+        if language_error is not None:
+            return _append_pipeline_report(
+                result,
+                "Language preprocessing failed; original source fields were passed through unchanged; "
+                + language_error,
+            )
+        return _with_language_report(result, detected_language, translation_required, target_profile)
 
     def _refine_canonical(
         self,
@@ -5586,7 +5776,7 @@ class OnekoOllamaPromptRefiner:
                 sampling_top_p,
                 timeout_seconds,
                 context_length,
-                system_instructions=_prompt_system_instructions(prompt_mode),
+                system_instructions=_prompt_system_instructions(prompt_mode, profile),
                 **generation_settings,
             )
             values = _validate_result(_extract_json_object(compiler_response))
@@ -5705,7 +5895,7 @@ class OnekoOllamaPromptRefiner:
                     sampling_top_p if prompt_mode == "creative" else 1.0,
                     timeout_seconds,
                     context_length,
-                    system_instructions=_prompt_system_instructions(prompt_mode),
+                    system_instructions=_prompt_system_instructions(prompt_mode, profile),
                     **generation_settings,
                 )
                 corrected_values = _validate_result(_extract_json_object(correction_response))

@@ -181,7 +181,11 @@ class OnekoNativeRegionalRectConditioning:
     RETURN_NAMES = ("conditioning", "mask_1", "mask_2", "mask_3")
     FUNCTION = "apply"
     CATEGORY = "Oneko/04 Regional/Apply"
-    DESCRIPTION = "Builds 2/3 rectangular masks and combines masked conditionings using ComfyUI core metadata."
+    DESCRIPTION = (
+        "Builds 2/3 rectangular masks and combines masked conditionings using ComfyUI core metadata. "
+        "Gaps remain unconditioned by these regions; overlaps blend using mask strengths. "
+        "Use full coverage or combine a global conditioning for background coverage."
+    )
 
     def apply(
         self,
@@ -217,7 +221,7 @@ class OnekoNativeRegionalRectConditioning:
 
         rects = [(x_1, y_1, w_1, h_1), (x_2, y_2, w_2, h_2), (x_3, y_3, w_3, h_3)]
         masks = _make_rect_masks(region_count, width, height, rects, soft_edge)
-        masks = _ensure_dense_diffusion_coverage(masks, region_count)
+        # Native masks preserve user-defined gaps and overlaps without redistribution.
         conditioning = _combine_masked_conditionings(conditionings, masks, strengths, region_count, set_cond_area)
         return (conditioning, masks[0], masks[1], masks[2])
 

@@ -7,33 +7,6 @@ from nodes import CLIPLoader, UNETLoader, VAELoader
 
 
 WEIGHT_DTYPES = ("default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2")
-CLIP_TYPES = (
-    "stable_diffusion",
-    "stable_cascade",
-    "sd3",
-    "stable_audio",
-    "mochi",
-    "ltxv",
-    "pixart",
-    "cosmos",
-    "lumina2",
-    "wan",
-    "hidream",
-    "chroma",
-    "ace",
-    "omnigen2",
-    "qwen_image",
-    "hunyuan_image",
-    "flux2",
-    "ovis",
-    "longcat_image",
-    "cogvideox",
-    "lens",
-    "pixeldit",
-    "ideogram4",
-    "boogu",
-    "krea2",
-)
 CLIP_DEVICES = ("default", "cpu")
 
 PREFERRED_UNET = "ANIMA\\mixanimamerge_v3.safetensors"
@@ -72,6 +45,10 @@ def _preferred_name(names, preferred):
         if name.replace("\\", "/") == normalized_preferred:
             return name
     return names[0] if names else ""
+
+
+def _clip_types():
+    return tuple(CLIPLoader.INPUT_TYPES()["required"]["type"][0])
 
 
 def _clip_type_for_model(model, clip_type):
@@ -131,7 +108,7 @@ class OnekoDiffusionClipVaeCyclerLoader:
                     },
                 ),
                 "clip_type": (
-                    CLIP_TYPES,
+                    _clip_types(),
                     {
                         "default": "stable_diffusion",
                         "tooltip": "CLIP type passed to the core Load CLIP node.",
@@ -208,7 +185,7 @@ class OnekoDiffusionClipVaeCyclerLoader:
             return "Invalid VAE file: {}".format(vae_name)
         if weight_dtype not in WEIGHT_DTYPES:
             return "Invalid weight dtype: {}".format(weight_dtype)
-        if clip_type not in CLIP_TYPES:
+        if clip_type not in _clip_types():
             return "Invalid CLIP type: {}".format(clip_type)
         if clip_device not in CLIP_DEVICES:
             return "Invalid CLIP device: {}".format(clip_device)

@@ -3,6 +3,7 @@ from .clip_sculpt_core import (
     SCULPT_METHODS,
     sculpt_clip_token_sets,
 )
+from .conditioning_context import attach_conditioning_context, capture_conditioning_context
 from .regional_prompt_encoder import (
     _clean_text,
     _combine_hiresfix_text,
@@ -72,7 +73,7 @@ class OnekoRegionalSculptPromptEncoder:
     FUNCTION = "encode"
     CATEGORY = "Oneko/04 Regional/Encode"
     DESCRIPTION = (
-        "Combines base and regional prompts, then encodes SDXL/CLIP regional prompts "
+        "Combines base and regional prompts, then encodes CLIP/Qwen regional prompts "
         "with low-memory Vector-Sculptor-style token embedding edits."
     )
 
@@ -112,6 +113,7 @@ class OnekoRegionalSculptPromptEncoder:
         hires_index = len(sculpt_texts)
         sculpt_texts.append(hiresfix_text)
         token_sets = [clip.tokenize(text) for text in sculpt_texts]
+        contexts = [capture_conditioning_context(clip, tokens) for tokens in token_sets]
         token_sets, stats = sculpt_clip_token_sets(
             clip,
             token_sets,
@@ -122,7 +124,10 @@ class OnekoRegionalSculptPromptEncoder:
             strict=True,
             scale_clip_g=False,
         )
-        conditionings = [clip.encode_from_tokens_scheduled(tokens) for tokens in token_sets]
+        conditionings = [
+            attach_conditioning_context(clip.encode_from_tokens_scheduled(tokens), context)
+            for tokens, context in zip(token_sets, contexts)
+        ]
 
         base_conditioning = _encode_text(clip, base_text)
         conditioning_1 = conditionings[0]

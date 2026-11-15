@@ -1,3 +1,6 @@
+from .conditioning_context import attach_conditioning_context, capture_conditioning_context
+
+
 class OnekoRegionalPromptEncoder:
     @classmethod
     def INPUT_TYPES(cls):
@@ -112,7 +115,8 @@ def _combine_hiresfix_text(base_text, region_texts, hiresfix_prompt, separator):
 
 def _encode_text(clip, text):
     tokens = clip.tokenize(text)
-    return clip.encode_from_tokens_scheduled(tokens)
+    context = capture_conditioning_context(clip, tokens)
+    return attach_conditioning_context(clip.encode_from_tokens_scheduled(tokens), context)
 
 
 NODE_CLASS_MAPPINGS = {

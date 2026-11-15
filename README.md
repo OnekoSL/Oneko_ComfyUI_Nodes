@@ -1,6 +1,6 @@
 # Oneko ComfyUI Nodes
 
-Eine kuratierte Sammlung von **43 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Basisversion **0.1.0**, ergänzt um zwei modulare Audio-Nodes und den Ollama Verse Maker im aktuellen Entwicklungsstand.
+Eine kuratierte Sammlung von **45 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.0** enthält den modularen Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung einschließlich experimentellem DiT Block Noise. [Änderungen in 0.2.0](CHANGELOG.md#020--2026-11-15).
 
 Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung. Registrierung, Anzeigenamen, Menüs, Frontend-Erweiterungen und Ollama-Route verwenden Oneko. Das Paket enthält seine Implementierungen selbst und importiert das alte Nukun-Paket nicht.
 
@@ -12,11 +12,13 @@ Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung.
 | Text und Ollama | 6 | Vokabular, MiniMax-H3-Promptaufbau, Bild-/Videoprompts und Captioning |
 | Conditioning | 5 | CLIP Sculpt, T5/Qwen-Ausgleich, Diagnose und Anpassung |
 | Regionen | 6 | Split-/Rechteckmasken, Prompt-Encoding und natives Conditioning |
-| Sampling | 4 | Universal KSampler, zwei Guider-Varianten und Noise Profile Cycler |
+| Sampling | 5 | Universal KSampler, zwei Guider-Varianten, Noise Profile Cycler und Empty Latent Aspect Ratio |
 | Bilder und Upscaling | 3 | Rekursiver Loader, USDU HiResFix, Pixel Anchored Remaster |
 | Wan 2.2 Video | 9 | Einstellungen, TI2V-Latent, Fortsetzung, Manifeste, Segmente und Zusammenbau |
 | Audio | 6 | Ollama Verse Maker, ACE Song Director, Timeline Conditioning, Fünfspur-Mixer und modularer Mixer mit gebündelten Spuren und eingebauten Masterreglern |
-| Model Patch / Hilfsmittel | 2 | UNet Block Noise Patch, Integer-/String-Zähler |
+| Model Patch / Hilfsmittel | 3 | UNet Block Noise Patch, MOSS DiT Block Noise, Integer-/String-Zähler |
+
+Der Ollama Prompt Refiner unterstützt nun zusätzlich `moss_image`: natürliche Beschreibungen ohne festes Wortbudget, räumliche Vorgaben und geschützte Bildbeschriftungen. [MOSS-Textvorlage](examples/oneko_moss_prompt_refiner.json) · [Bedienung und Fallback-Grenzen](examples/README.md#moss-ollama-prompt-refiner).
 
 [Vollständiger Node-Katalog](docs/NODE_KATALOG.md) · [Auswahl und Ausschlüsse](docs/AUSWAHL.md) · [Migration](docs/MIGRATION.md) · [Roadmap](ROADMAP.md)
 
@@ -38,10 +40,10 @@ Danach ComfyUI neu starten. Die Nodes erscheinen unter `Oneko/01 Loaders` bis `O
 
 ## Voraussetzungen je Funktion
 
-- **Basis:** eine aktuelle kompatible ComfyUI-Installation mit ihren eigenen Torch-, Torchaudio-, NumPy- und Pillow-Abhängigkeiten. Die modularen Audio-Nodes verwenden die V3-/Autogrow-API; geprüft mit ComfyUI **0.36.0**, Frontend **1.52.7** und Python 3.12.10.
+- **Basis:** eine aktuelle kompatible ComfyUI-Installation mit ihren eigenen Torch-, Torchaudio-, NumPy- und Pillow-Abhängigkeiten. Die modularen Audio-Nodes verwenden die V3-/Autogrow-API; die aktuelle CPU-/Importprüfung besteht mit ComfyUI **0.45.0** und Python **3.12.10**. MOSS-Funktionen benötigen einen Core-Stand mit MOSS-Unterstützung; Umfang und frühere Browser-/Modellabnahmen stehen im [Validierungsprotokoll](docs/VALIDIERUNG.md).
 - **Ollama:** ein erreichbarer Ollama-Dienst und selbst gewählte installierte Text-/Vision-Modelle. Default-URL: `http://127.0.0.1:11434`. Das Paket lädt keine Modelle automatisch herunter. Modelllisten werden über `/oneko/ollama/models` bereitgestellt.
 - **HiResFix Tiled:** benötigt das aktive Originalpaket `ComfyUI_UltimateSDUpscale` mit `UltimateSDUpscaleNoUpscale`. Der H3-Fork ist dafür nicht erforderlich.
-- **Wan-Video:** passende Wan-2.2-TI2V-5B-Modelle und VAE. Segmentzusammenbau benötigt ComfyUIs vorhandene Video-/PyAV-Funktionen und einen unterstützten Codec.
+- **Wan-Video:** passende Wan-2.2-TI2V-5B-Modelle und VAE. Segmentzusammenbau benötigt die in `requirements.txt` deklarierten Pakete `imageio` und `imageio-ffmpeg` mit einem unterstützten Codec.
 - **ACE:** passende ACE-Step-1.5-Komponenten für Timeline Conditioning. Der Audio Timeline Mixer verarbeitet normales ComfyUI-`AUDIO` und benötigt kein ACE-Modell.
 - **Externe Sampler:** `SamplerSPEED` bleibt im separaten Paket `ComfyUI-SPEED`. Ein dort erzeugter `SAMPLER` kann mit Onekos Universal Noise Samplern verwendet werden. Oneko liefert keine Kopie dieses Samplers mit.
 
@@ -74,7 +76,7 @@ CPU-Tests gegen eine vorhandene ComfyUI-Installation:
 
 ```powershell
 python tools/run_tests.py --comfy-root "PFAD_ZU_COMFYUI" -q
-node --test tests/test_independent_vocab_controls_frontend.mjs
+node --test tests/*.mjs
 ```
 
 Die Python-Tests blockieren reale Ollama-HTTP-Anfragen und verwenden gezielte Testantworten. [Validierungsstand](docs/VALIDIERUNG.md) und [Beitragsregeln](CONTRIBUTING.md) beschreiben Umfang und Grenzen.

@@ -392,7 +392,7 @@ class OnekoUniversalKSampler:
         guider.set_conds(positive, negative)
         guider.set_cfg(cfg)
         sampler = comfy.samplers.sampler_object(sampler_name)
-        sigmas = _calculate_sigmas(model, scheduler, steps, denoise)
+        sigmas = _calculate_sigmas(model, scheduler, steps, denoise, sampler_name)
         if add_noise:
             noise = make_noise_generator(seed, noise_device, noise_profile, noise_strength, detail_bias)
         else:
@@ -409,15 +409,13 @@ class OnekoUniversalKSampler:
         )
 
 
-def _calculate_sigmas(model, scheduler, steps, denoise):
-    total_steps = int(steps)
-    if denoise < 1.0:
-        if denoise <= 0.0:
-            return torch.FloatTensor([])
-        total_steps = int(steps / denoise)
-
-    sigmas = comfy.samplers.calculate_sigmas(model.get_model_object("model_sampling"), scheduler, total_steps).cpu()
-    return sigmas[-(int(steps) + 1) :]
+def _calculate_sigmas(model, scheduler, steps, denoise, sampler_name="euler"):
+    # Core owns sampler-specific sigma omissions (DPM2) and denoise slicing.
+    schedule = comfy.samplers.KSampler(
+        model, steps=int(steps), device="cpu", sampler=sampler_name,
+        scheduler=scheduler, denoise=denoise,
+    )
+    return schedule.sigmas.cpu()
 
 
 NODE_CLASS_MAPPINGS = {

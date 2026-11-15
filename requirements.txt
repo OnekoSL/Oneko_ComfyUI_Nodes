@@ -1,2 +1,4 @@
 numpy>=1.26
 Pillow>=10.0
+imageio>=2.37.0
+imageio-ffmpeg>=0.6.0

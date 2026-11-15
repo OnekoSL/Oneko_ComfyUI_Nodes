@@ -1,5 +1,51 @@
 # Migration zu Oneko
 
+## MOSS: Ollama Prompt Refiner
+
+Im vorhandenen `OnekoOllamaPromptRefiner` steht zusätzlich `target_profile=moss_image` zur Verfügung. ComfyUI nach Ende laufender Aufträge neu starten und die Browserseite neu laden. Anschließend das Profil ausdrücklich auswählen; das bisherige Standardprofil `pony_v7`, bestehende Workflowwerte, Node-ID, Widgetreihenfolge, acht Ausgänge und Seeds bleiben unverändert. Kein Austausch der Node oder neue Verkabelung nötig.
+
+MOSS verwendet natürliche Beschreibungen ohne festes Wortbudget. `positive` beginnt mit dem Hauptmotiv, anschließend folgen Umgebung und Stil. `negative` darf leer sein und erhält keine pauschalen Text-/Logo-Ausschlüsse. Gewünschte Bildschrift mit Träger und Anführungszeichen angeben, zum Beispiel `a sign reading "Grüße, Welt!"`. Erkannte Bildtexte werden auch bei der Sprachvorverarbeitung und in den räumlichen Eingängen auf unveränderten Wortlaut geprüft.
+
+Die bestehende Sprachvorstufe versucht, Beschreibungen ins Englische zu übertragen. Bildschrift behält ihre Originalsprache; ein Modell kann diese Vorgabe dennoch verletzen. `adaptive` versucht Reparaturen und fällt nötigenfalls auf die unveränderten Quellen zurück, die dann noch Deutsch enthalten können. `strict` meldet gescheiterte Validierung, `continue` kann fehlerhafte Antwortteile mit Warnung weiterreichen. Den Report beachten; eine unveränderte Ausgabe beweist keine englische Sprache. Stilanker bleiben wie bisher unverändert.
+
+[Testvorlage](../examples/oneko_moss_prompt_refiner.json), [Bedienhinweise](../examples/README.md#moss-ollama-prompt-refiner) und [Prüfgrenzen](VALIDIERUNG.md). Layout-/BBox-Modus ist nicht Bestandteil dieses Profils.
+
+## MOSS: Conditioning Adjust und Encoder-Kontext
+
+`OnekoConditioningAdjust` behält ID, Eingänge, Ausgänge, Presets und bisherige Widgetreihenfolge. Das neue Profil `moss_image` steht zusätzlich am Ende der Profilauswahl. Bestehende T5-/SDXL-/SD1.5-Profile behalten ihre Berechnung. ComfyUI nach dem Update neu starten und die Encoder erneut ausführen, damit neue MOSS-Conditionings ihre Tokeninformationen tragen.
+
+Für MOSS den Conditioning-Ausgang von **CLIP Sculpt Text Encode (Oneko)**, einem der beiden Oneko-Balancer oder einem Oneko-Regional-Encoder an Adjust anschließen. Für unverändertes Encoding mit CLIP Sculpt Intensität `0` und Normalisierung `none` wählen. Die Encoder ergänzen bei echtem MOSS `oneko_conditioning_context` in kopierte Metadaten; vorhandene Metadaten und Textvektoren werden dadurch nicht umgeschrieben. Keine neuen Kabel oder Node-IDs sind nötig, wenn bereits ein solcher Oneko-Encoder verwendet wird.
+
+Adjust erkennt diese Herkunftsinformation mit `model_profile=auto`. Alle aktiven MOSS-Presets erhalten Chat-/Thinking-/Sondertokenpositionen und native Textlängen. `preserve_magnitude` erhält die RMS je Bild über den bearbeitbaren Nutzertext, statt geschützte Positionen mit zu skalieren. Die MOSS-Skalierung startet mit den bestehenden zurückhaltenden generischen Faktoren; Ergebnisse können sich gegenüber der früheren vollständigen T5-artigen Sequenzbearbeitung ändern.
+
+Bei nativem Core-`CLIPTextEncode` fehlen Modellkennung und Nutzertextpositionen. Für MOSS auf den neutral eingestellten Oneko-Encoder umstellen. Unmarkiertes `auto` behält die bisherige Breitenheuristik aus Kompatibilitätsgründen bei, kennzeichnet sie aber als unsichere Modellzuordnung. Explizites `moss_image` ohne gültige MOSS-Tokeninformationen meldet bei aktiver Bearbeitung einen Fehler. Ungültige oder nicht zur Sequenz passende Masken werden nicht geraten; auch eine explizite Wahl von `t5` überschreibt vorhandenen MOSS-Schutz nicht.
+
+Die Maskeninformationen sind zusätzlich an Form, Datentyp und Inhalt der erzeugten Textvektoren gebunden. Dadurch wird auch eine nachträgliche Mischung oder Umordnung gleicher Länge erkannt. Adjust vor solchen Änderungen einsetzen, etwa vor `ConditioningAverage`. Reine Tensor-Kopien und Änderungen räumlicher Metadaten sind erlaubt; verkettete Adjust-Nodes aktualisieren die Bindung nach jeder Bearbeitung. Neutrale Zustände bleiben unverändert und melden ungültigen Kontext nur im Bericht.
+
+`enabled=false`, `strength=0` und `neutral_report_only` bleiben unabhängig von fehlenden Tokeninformationen exakt neutral. Für weitere Details und alle fünf Presets siehe [Bedienbeispiel](../examples/README.md#moss-conditioning-adjust).
+
+## MOSS-Integration: Universal KSampler und HiResFix
+
+IDs, Anschlusspositionen und gespeicherte Widgetwerte bleiben gültig; bestehende Nodes müssen nicht neu angelegt werden. ComfyUI zum Laden der Korrekturen neu starten. Die neue [MOSS-Grundvorlage](../examples/oneko_moss_oneko_pipeline.json) ist ein zusätzlicher Einstieg und schreibt keine vorhandenen Workflows um.
+
+Universal KSampler übernimmt jetzt die native Core-Sigmaplanung. Für DPM2 korrigiert das eine bisher abweichende Schrittfolge. Bei gleichem Seed können sich deshalb DPM2-Ausgaben ändern; die Seed-Berechnung selbst bleibt erhalten.
+
+HiResFix Tiled rundet die wirksamen Tilemaße einschließlich Padding auf das VAE-Raster auf. Für Faktor-16-VAEs werden bereits im positiven oder negativen Conditioning vorhandene `reference_latents` ausdrücklich abgewiesen, weil Ultimate SD Upscale diese nicht korrekt zuschneidet. Externe Referenzen vor HiResFix entfernen. `use_reference_latent` ist zusätzliches, experimentelles Referenz-Conditioning und setzt ein dafür geeignetes Modell voraus; es ist kein allgemeiner Bildschutz für T2I-Checkpoints. Neue Nodes starten deshalb mit `false`. Gespeichertes `true` bleibt erhalten und muss für gewöhnliches MOSS-T2I-HiRes ausdrücklich ausgeschaltet werden. Die interne Faktor-16-Option nutzt das vollständige hochskalierte Bild und kann entsprechend viel VRAM benötigen. Bei Batches wird jede Bildreferenz den Tiles ihres Ausgangsbilds zugeordnet.
+
+In der geprüften USDU-Version 1.7.2 fehlt dem Sampler eine `noise_mask`. `use_differential_diffusion` bewirkt dort keine progressive Tile-Maskierung; Oneko warnt einmal pro Lauf. Die Zusammensetzung der dekodierten Tiles über USDU-Pixelmasken funktioniert weiterhin. [Bedienung und Grenzen](../examples/README.md#moss-hiresfix-tiled).
+
+## Neue MOSS-DiT-Noise-Node
+
+`OnekoDiTBlockNoisePatch` ist eine zusätzliche V3-Node; die UNet-Node-ID und vorhandene Workflows behalten ihre Bedeutung. Für MOSS die neue Node im Modellpfad vor dem Sampler hinzufügen. Stärke 0 ist neutral. Bestehende UNet-Nodes werden nicht automatisch ersetzt. Die neue Node benötigt einen Core mit nativer MOSS- und Diffusionswrapper-Unterstützung; umgesetzt und geprüft auf dem lokalen ComfyUI-0.45.0-Stand. Fehlt das MOSS-Modul, bleibt das Paket importierbar; erst der Aufruf der DiT-Node meldet das nötige ComfyUI-Update.
+
+## Regional Rect und UNet Block Noise
+
+Nach Schritt 3 sind keine neuen Nodes oder Anschlüsse erforderlich. Regional Rect läuft wieder und erhält Rechteckmasken einschließlich gewollter Lücken/Überlappungen unverändert. Es gibt keine automatische Hintergrundfüllung. UNet Block Noise weist MOSS und andere DiT-Modelle jetzt ausdrücklich zurück, weil deren Architektur die bisherigen Hooks nicht ausführt. In solchen Workflows die Node umgehen; unterstützte UNets behalten Seeds und Patch-Verhalten. ComfyUI zum Laden der Änderungen neu starten.
+
+## MOSS-Balancer: native Textlängen
+
+Die IDs, Anschlüsse und gespeicherten Widgetwerte beider T5/Qwen-Balancer bleiben gültig; Nodes müssen nicht neu angelegt werden. Nach dem Update ComfyUI neu starten. Bei MOSS wird `target` jetzt ignoriert, weil erzwungenes Padding die Diffusionspositionen verändert. Positive und negative Conditionings behalten ihre jeweiligen nativen Längen. Der INT-Ausgang `effective_target` bezeichnet bei MOSS das Maximum der beiden Rohzählungen, kein gemeinsames Paddingziel. Dies wird im Report erklärt. Nachgeschaltete Logik darf daraus keine Gleichheit der beiden MOSS-Conditioning-Längen ableiten. Andere T5-/Qwen-Pfade behalten ihre bisherige Bedeutung.
+
 ## Modularer Audio Timeline Mixer
 
 Der neue `OnekoAudioTimelineMixer` ersetzt bestehende Fünfspur-Nodes nicht automatisch. `NukunAudioTimelineMixer5` und `OnekoAudioTimelineMixer5` bleiben mit ihren bisherigen Eingängen nutzbar. Das bestehende ID-Migrationswerkzeug ordnet weiterhin den alten Fünfspur-Vertrag zu; es erstellt keine Settings-Nodes.

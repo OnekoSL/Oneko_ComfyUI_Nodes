@@ -1,3 +1,6 @@
+from .conditioning_context import attach_conditioning_context, capture_conditioning_context
+
+
 SUPPORTED_TEXT_STREAM_KEYS = (
     "pile_t5xl",
     "t5xxl",
@@ -12,10 +15,28 @@ SUPPORTED_TEXT_STREAM_KEYS = (
     "qwen3_06b",
     "qwen3vl_4b",
     "qwen3vl_8b",
+    "qwen35_9b",
 )
 
 # Backwards-compatible name for older imports.
 SUPPORTED_T5_KEYS = SUPPORTED_TEXT_STREAM_KEYS
+
+
+def requires_native_text_lengths(clip):
+    # Older Cores can still use the existing T5/Qwen balancers without MOSS.
+    try:
+        from comfy.text_encoders.moss_image import MOSSImageTokenizer
+    except ImportError:
+        return False
+    # MOSS positions its image tokens after the actual text context. Its diffusion
+    # model does not consume the text encoder's attention_mask to discard padding.
+    return isinstance(getattr(clip, "tokenizer", None), MOSSImageTokenizer)
+
+
+MOSS_NATIVE_LENGTH_REPORT = (
+    "; MOSS native lengths: requested target not applied; "
+    "effective target reports the maximum native length, not a shared padding length"
+)
 
 
 class OnekoT5EqualLengthBalancer:
@@ -31,7 +52,7 @@ class OnekoT5EqualLengthBalancer:
                         "min": 0,
                         "max": 4096,
                         "step": 1,
-                        "tooltip": "Minimum shared token length for positive and negative prompts.",
+                        "tooltip": "Minimum shared token length. MOSS keeps native prompt lengths and ignores this target.",
                     },
                 ),
                 "positive": ("STRING", {"multiline": True, "dynamicPrompts": True}),
@@ -52,7 +73,8 @@ class OnekoT5EqualLengthBalancer:
     CATEGORY = "Oneko/03 Conditioning/Encode"
     DESCRIPTION = (
         "Encodes positive and negative prompts with a supported T5/Qwen tokenizer, "
-        "padding both to the same effective token length and returning token diagnostics."
+        "padding both to the same effective token length and returning token diagnostics. "
+        "MOSS preserves native positive/negative lengths because padding changes its positions."
     )
 
     def _set_text_stream_options(self, clip, min_length=None, min_padding=None):
@@ -124,24 +146,39 @@ class OnekoT5EqualLengthBalancer:
         positive_raw_count = self._token_count(raw_positive_tokens, stream_key)
         negative_raw_count = self._token_count(raw_negative_tokens, stream_key)
         requested_target = max(0, int(target))
-        effective_target = max(requested_target, positive_raw_count, negative_raw_count)
-
-        encoder = tokenizer.clone()
-        self._set_text_stream_options(encoder, min_padding=0)
-        encoder.set_tokenizer_option(f"{stream_key}_min_length", effective_target)
-
-        positive_tokens = encoder.tokenize(positive)
-        negative_tokens = encoder.tokenize(negative)
-        cond_positive = encoder.encode_from_tokens_scheduled(positive_tokens)
-        cond_negative = encoder.encode_from_tokens_scheduled(negative_tokens)
+        native_lengths = requires_native_text_lengths(tokenizer)
+        effective_target = max(positive_raw_count, negative_raw_count)
+        if native_lengths:
+            encoder = measure
+            positive_tokens = raw_positive_tokens
+            negative_tokens = raw_negative_tokens
+        else:
+            effective_target = max(requested_target, effective_target)
+            encoder = tokenizer.clone()
+            self._set_text_stream_options(encoder, min_padding=0)
+            encoder.set_tokenizer_option(f"{stream_key}_min_length", effective_target)
+            positive_tokens = encoder.tokenize(positive)
+            negative_tokens = encoder.tokenize(negative)
+        positive_context = capture_conditioning_context(encoder, positive_tokens)
+        negative_context = capture_conditioning_context(encoder, negative_tokens)
+        cond_positive = attach_conditioning_context(
+            encoder.encode_from_tokens_scheduled(positive_tokens), positive_context
+        )
+        cond_negative = attach_conditioning_context(
+            encoder.encode_from_tokens_scheduled(negative_tokens), negative_context
+        )
 
         report = (
             f"text stream: {stream_key}; "
             f"positive raw: {positive_raw_count}; "
             f"negative raw: {negative_raw_count}; "
             f"requested target: {requested_target}; "
-            f"effective target: {effective_target}"
+            f"effective target: {effective_target}; "
+            "raw counts: including chat template (if present), excluding extra padding"
         )
+
+        if native_lengths:
+            report += MOSS_NATIVE_LENGTH_REPORT
 
         return (
             cond_positive,

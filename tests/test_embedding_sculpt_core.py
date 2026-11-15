@@ -225,5 +225,51 @@ class ChunkedEmbeddingSearchTests(unittest.TestCase):
         self.assertEqual(required["top_k"][1]["default"], 64)
 
 
+
+class SculptProgressAndInterruptTests(unittest.TestCase):
+    def setUp(self):
+        self.weight = torch.randn(31, 9, generator=torch.Generator().manual_seed(53))
+
+    def test_search_reports_every_chunk_and_finishes_all_query_batches(self):
+        with patch.object(core.comfy.utils, "ProgressBar") as progress:
+            core._search_on_device(
+                self.weight, [1, 7, 23], 4, torch.device("cpu"),
+                work_bytes=180, query_batch_size=2,
+            )
+        progress.assert_called_once_with(62)
+        progress.return_value.update_absolute.assert_called_once_with(0)
+        updates = [call.args[0] for call in progress.return_value.update.call_args_list]
+        self.assertGreater(len(updates), 2)
+        self.assertEqual(sum(updates), 62)
+
+    def test_cancel_during_search_stops_between_chunks_without_cpu_retry(self):
+        with (
+            patch.object(core.model_management, "throw_exception_if_processing_interrupted",
+                         side_effect=[None, None, core.model_management.InterruptProcessingException()]) as check,
+            patch.object(core.model_management, "soft_empty_cache") as empty_cache,
+            patch.object(core.comfy.utils, "ProgressBar") as progress,
+        ):
+            with self.assertRaises(core.model_management.InterruptProcessingException):
+                core._search_on_device(
+                    self.weight, [2, 5], 4, torch.device("cpu"), work_bytes=180,
+                )
+        self.assertEqual(check.call_count, 3)
+        self.assertEqual(progress.return_value.update.call_count, 1)
+        empty_cache.assert_not_called()
+
+    def test_mean_magnitude_reports_progress_and_honors_cancel(self):
+        with patch.object(core, "CPU_WORK_BYTES", 180), patch.object(core.comfy.utils, "ProgressBar") as progress:
+            actual, _stats = core.streaming_mean_magnitude(self.weight, preferred_device="cpu")
+        self.assertAlmostEqual(actual, torch.linalg.vector_norm(self.weight, dim=1).mean().item(), places=6)
+        self.assertEqual(sum(call.args[0] for call in progress.return_value.update.call_args_list), 31)
+        with (
+            patch.object(core, "CPU_WORK_BYTES", 180),
+            patch.object(core.model_management, "throw_exception_if_processing_interrupted",
+                         side_effect=[None, core.model_management.InterruptProcessingException()]),
+        ):
+            with self.assertRaises(core.model_management.InterruptProcessingException):
+                core.streaming_mean_magnitude(self.weight, preferred_device="cpu")
+
+
 if __name__ == "__main__":
     unittest.main()

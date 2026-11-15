@@ -139,14 +139,114 @@ def test_second_attempt_quality_and_format_failures_do_not_stop_run(second, expe
     unload.assert_called_once()
 
 
-def test_source_fields_are_last_resort_when_both_drafts_are_unusable(transport):
+def test_source_lyrics_are_never_substituted_for_failed_generation(transport):
     request, _ = transport
     request.return_value = "{}"
     lyrics, style, report = maker.OnekoOllamaVerseMaker().generate(
         mode="Überarbeiten", source_lyrics="Original lyrics", style_reference="Original style",
     )
-    assert (lyrics, style) == ("Original lyrics", "Original style")
-    assert "Vorlage" in report
+    assert (lyrics, style) == ("", "")
+    assert "Liedvorlage wurde nicht" in report
+    assert "Stilvorlage wurde nicht" in report
+    assert request.call_count == 2
+
+
+@pytest.mark.parametrize("mode", maker.MODES)
+@pytest.mark.parametrize("copied", [
+    "[Verse 1]\nDer Wind trägt uns zum Hafen hin.\nDort wartet unser Neubeginn.\nDie Planken glänzen nass im Licht.\nWir fürchten diese Wellen nicht.",
+    "[Strophe]\nDer Wind trägt uns zum Hafen hin!\nDort wartet unser Neubeginn!\nDie Planken glänzen nass im Licht!\nWir fürchten diese Wellen nicht!",
+    "[Verse 1]\nDer Wind trägt uns zum Hafen hin.\nDort wartet unser Neubeginn.\nDie Planken leuchten nass im Licht.\nWir fürchten diese Wellen nicht.",
+])
+def test_copied_and_lightly_reworded_source_triggers_new_draft(mode, copied, transport):
+    request, _ = transport
+    source = "[Verse 1]\nDer Wind trägt uns zum Hafen hin.\nDort wartet unser Neubeginn.\nDie Planken glänzen nass im Licht.\nWir fürchten diese Wellen nicht."
+    request.side_effect = [response(lyrics=copied), response()]
+    lyrics, _, _ = maker.OnekoOllamaVerseMaker().generate(mode=mode, song_idea="Heimkehr", source_lyrics=source)
+    assert lyrics == json.loads(response())["lyrics"]
+    assert request.call_count == 2
+    assert "lyrics mostly copy source_lyrics" in request.call_args.args[2]
+    assert "new draft from scratch" in request.call_args.args[2]
+    assert request.call_args.args[4:6] == (0.7, 0.9)
+
+
+@pytest.mark.parametrize("field", ["song_idea", "style_reference", "special_requests"])
+def test_input_brief_is_not_accepted_as_finished_lyrics(field, transport):
+    request, _ = transport
+    brief = "Schreibe ein ruhiges Lied über eine lange Seereise."
+    request.side_effect = [response(lyrics="[Verse 1]\n" + brief), response()]
+    maker.OnekoOllamaVerseMaker().generate(**{field: brief})
+    assert request.call_count == 2
+    assert f"lyrics mostly copy {field}" in request.call_args.args[2]
+
+
+def test_requested_verbatim_chorus_is_exempt_from_copy_detection(transport):
+    request, _ = transport
+    chorus = "Hejo, hejo, wir fahren nach Haus!"
+    source = f"[Verse 1]\nDer kalte Wind trägt uns hinaus.\n\n[Chorus]\n{chorus}\n{chorus}"
+    generated = f"[Verse 1]\nAm Horizont glüht roter Schein.\nDie Freunde schenken Freude ein.\n\n[Chorus]\n{chorus}\n{chorus}"
+    request.return_value = response(lyrics=generated)
+    actual = maker.OnekoOllamaVerseMaker().generate(source_lyrics=source, must_keep=chorus)
+    assert actual[0] == generated
+    request.assert_called_once()
+
+
+def test_second_copied_draft_still_passes_for_continuous_runs(transport):
+    request, _ = transport
+    source = "[Verse 1]\nDie kalte Nacht legt sich aufs Meer.\nDie Mannschaft sehnt die Heimat her."
+    request.return_value = response(lyrics=source)
+    lyrics, _, report = maker.OnekoOllamaVerseMaker().generate(source_lyrics=source)
+    assert lyrics == source
+    assert "Warnung" in report and "copy source_lyrics" in report
+    assert request.call_count == 2
+
+
+@pytest.mark.parametrize("reference,copied", [
+    ("Calm female vocals, 70 BPM, 3/4, E minor.", "Calm female vocals, 70 BPM, 3/4, E minor."),
+    ("Calm female vocals, 70 BPM, 3/4, E minor.", "CALM FEMALE VOCALS; 70 BPM; 3/4; E MINOR!"),
+    ("Calm female vocals, 70 BPM, 3/4, E minor.", "Soft female vocals, 70 BPM, 3/4, E minor."),
+    ("folk", "Folk"),
+])
+def test_copied_style_triggers_song_specific_repair(reference, copied, transport):
+    request, _ = transport
+    request.side_effect = [response(style=copied), response()]
+    _, style, _ = maker.OnekoOllamaVerseMaker().generate(song_idea="Heimkehr", style_reference=reference)
+    assert style == json.loads(response())["style"]
+    assert request.call_count == 2
+    assert "style mostly copies style_reference" in request.call_args.args[2]
+    assert "Keep the generated lyrics" in request.call_args.args[2]
+    assert request.call_args.args[4:6] == (0.7, 0.9)
+
+
+def test_expanded_style_can_preserve_required_musical_details(transport):
+    request, _ = transport
+    reference = "female vocals, 70 BPM, 3/4, E minor"
+    developed = (
+        "At 70 BPM in 3/4 and E minor, low female vocals lead an intimate acoustic lament. "
+        "Begin with sparse bowed strings under the solo verse, add a quiet frame drum, then "
+        "open the chorus into warm unison voices. End with an unaccompanied final line."
+    )
+    request.return_value = response(style=developed)
+    assert maker.OnekoOllamaVerseMaker().generate(song_idea="Heimkehr", style_reference=reference)[1] == developed
+    request.assert_called_once()
+
+
+def test_second_copied_style_passes_with_warning_for_continuous_runs(transport):
+    request, _ = transport
+    reference = "Calm female vocals, 70 BPM, 3/4, E minor."
+    request.return_value = response(style=reference)
+    _, style, report = maker.OnekoOllamaVerseMaker().generate(song_idea="Heimkehr", style_reference=reference)
+    assert style == reference
+    assert "Warnung" in report and "style mostly copies" in report
+    assert request.call_count == 2
+
+
+def test_missing_generated_style_does_not_pass_through_reference(transport):
+    request, _ = transport
+    request.return_value = response(style="")
+    lyrics, style, report = maker.OnekoOllamaVerseMaker().generate(song_idea="Heimkehr", style_reference="folk")
+    assert lyrics == json.loads(response())["lyrics"]
+    assert style == ""
+    assert "Stilvorlage wurde nicht" in report
     assert request.call_count == 2
 
 

@@ -1,4 +1,10 @@
+import logging
+import time
+from dataclasses import replace
+
 import torch
+import comfy.utils
+from comfy.quant_ops import QuantizedTensor
 import comfy.model_management as model_management
 
 
@@ -20,11 +26,43 @@ def _as_device(device):
     return device if isinstance(device, torch.device) else torch.device(device)
 
 
+def _gather_embedding_rows(source, row_ids, device):
+    # Views avoid source-device allocation; copies protect tables from normalization.
+    if isinstance(row_ids, range) and row_ids.step == 1:
+        return source[row_ids.start:row_ids.stop].to(device=device, copy=True)
+    if device.type == "cpu" and source.device.type != "cpu":
+        # An OOM fallback must allocate neither indices nor gathered rows on the GPU.
+        return torch.cat(
+            [source[index:index + 1].to(device=device, copy=True) for index in row_ids],
+            dim=0,
+        )
+    indices = torch.tensor(row_ids, device=source.device, dtype=torch.long)
+    return torch.index_select(source, 0, indices).to(device=device)
+
+
 def _embedding_rows(weight, row_ids, device):
+    model_management.throw_exception_if_processing_interrupted()
+    device = _as_device(device)
     if not row_ids:
         return torch.empty((0, int(weight.shape[1])), device=device, dtype=torch.float32)
-    source_index = torch.tensor(row_ids, device=weight.device, dtype=torch.long)
-    rows = torch.index_select(weight.detach(), 0, source_index)
+    if isinstance(weight, QuantizedTensor):
+        # Indexing the wrapper falls back to decoding the ENTIRE embedding table.
+        # Gather stored rows and per-row scales first, as Core Embedding.host_rows does.
+        layout = weight.layout_cls
+        params = weight._params
+        rows = _gather_embedding_rows(weight._qdata, row_ids, device)
+        scale = params.scale
+        if scale.ndim >= 2:
+            scale = _gather_embedding_rows(scale, row_ids, device)
+        params = replace(params, scale=scale.to(device), orig_shape=(len(row_ids), int(weight.shape[1])))
+        if hasattr(layout, "dequantize_embedding"):
+            rows = layout.dequantize_embedding(rows, params, torch.arange(len(row_ids), device=device))
+        elif rows.dtype in (torch.float8_e4m3fn, torch.float8_e5m2) and scale.numel() == 1:
+            rows = layout.dequantize(rows, params)
+        else:
+            raise RuntimeError(f"Oneko Sculpt: unsupported quantized embedding layout {layout.__name__}.")
+    else:
+        rows = _gather_embedding_rows(weight.detach(), row_ids, device)
     return rows.to(device=device, dtype=torch.float32)
 
 
@@ -58,6 +96,10 @@ def _search_on_device(
     max_chunk_rows = 0
     query_batches = 0
 
+    progress = comfy.utils.ProgressBar(vocab_size * ((len(token_ids) + query_batch_size - 1) // query_batch_size))
+    progress.update_absolute(0)
+    started = time.perf_counter()
+    logging.info("Oneko Sculpt: searching %d tokens in %d x %d embedding table on %s", len(token_ids), vocab_size, hidden_size, device)
     with torch.no_grad():
         for query_start in range(0, len(token_ids), query_batch_size):
             query_ids = token_ids[query_start : query_start + query_batch_size]
@@ -70,11 +112,7 @@ def _search_on_device(
 
             for row_start in range(0, vocab_size, chunk_rows):
                 row_end = min(vocab_size, row_start + chunk_rows)
-                source_rows = weight.detach()[row_start:row_end]
-                if source_rows.device == device and source_rows.dtype == torch.float32:
-                    rows = source_rows.clone()
-                else:
-                    rows = source_rows.to(device=device, dtype=torch.float32)
+                rows = _embedding_rows(weight, range(row_start, row_end), device)
                 _normalized_in_place(rows)
                 scores = torch.matmul(rows, queries.T)
 
@@ -96,6 +134,7 @@ def _search_on_device(
                     best_ids = torch.gather(merged_ids, 0, positions)
 
                 del rows, scores, local_scores, local_offsets, local_ids
+                progress.update(row_end - row_start)
 
             best_scores = best_scores.detach().cpu()
             best_ids = best_ids.detach().cpu()
@@ -106,7 +145,10 @@ def _search_on_device(
                 )
             del queries, best_scores, best_ids
 
+    elapsed = time.perf_counter() - started
+    logging.info("Oneko Sculpt: embedding search finished in %.2fs", elapsed)
     return result, {
+        "elapsed_seconds": elapsed,
         "device": str(device),
         "cpu_fallback": False,
         "chunk_rows": max_chunk_rows,
@@ -148,12 +190,16 @@ def streaming_mean_magnitude(weight, preferred_device=None):
         chunk_rows = _chunk_rows(hidden_size, 1, budget, vocab_size)
         total = 0.0
         count = 0
+        progress = comfy.utils.ProgressBar(vocab_size)
+        progress.update_absolute(0)
         with torch.no_grad():
             for start in range(0, vocab_size, chunk_rows):
-                rows = weight.detach()[start : start + chunk_rows].to(device=device, dtype=torch.float32)
+                end = min(vocab_size, start + chunk_rows)
+                rows = _embedding_rows(weight, range(start, end), device)
                 total += torch.linalg.vector_norm(rows, dim=1).sum().item()
                 count += rows.shape[0]
                 del rows
+                progress.update(end - start)
         return total / max(1, count), chunk_rows, str(device)
 
     try:
@@ -288,6 +334,8 @@ class EmbeddingSculptSession:
             f"search device: {label}; unique tokens: {stats['unique_tokens']}; "
             f"chunk rows: {stats['chunk_rows']}; query batches: {stats['query_batches']}"
         )
+        if "elapsed_seconds" in stats:
+            report += f"; search time: {stats['elapsed_seconds']:.2f}s"
         if self._mean_stats is not None:
             mean_label = self._mean_stats["device"]
             if self._mean_stats.get("cpu_fallback"):

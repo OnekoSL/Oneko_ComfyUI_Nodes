@@ -228,7 +228,35 @@ class LanguageNormalizationTests(unittest.TestCase):
         self.assertEqual(refiner._prompt_token("Mädchen"), "mädchen")
         self.assertEqual(refiner._concept_tokens("Mädchen Ölgemälde"), ["mädchen", "ölgemälde"])
 
-    def test_language_failure_still_unloads_the_model(self):
+    def test_invalid_language_json_respects_non_strict_fallback_modes(self):
+        source = '  roter Drache source_anime vor einem Schild "Grüße"  '
+        result = ("positive", "negative", "report", "base", "foreground", "background", "{}", "{}")
+        for mode in ("adaptive", "continue"):
+            with self.subTest(mode=mode):
+                node = refiner.OnekoOllamaPromptRefiner()
+                with mock.patch.object(
+                    refiner, "_request_ollama", side_effect=["not json", "still not json"]
+                ) as request, mock.patch.object(
+                    node, "_refine_canonical", return_value=result
+                ) as canonical, mock.patch.object(refiner, "_unload_after_run") as unload:
+                    output = node.refine(
+                        source, "url", "model", "anima", 7, 0.8, 0.9, 430, 30,
+                        style_anchor="pastel drawing", left=" alter Turm ",
+                        fallback_mode=mode,
+                    )
+
+                self.assertEqual(request.call_count, 2)
+                self.assertEqual(canonical.call_args.args[0], source)
+                self.assertEqual(canonical.call_args.args[10:15], ("pastel drawing", " alter Turm ", "", "", ""))
+                self.assertEqual(canonical.call_args.args[15], mode)
+                self.assertEqual(output[:2], result[:2])
+                self.assertEqual(output[3:], result[3:])
+                self.assertIn("original source fields were passed through unchanged", output[2])
+                self.assertIn("invalid JSON twice", output[2])
+                self.assertNotIn("translated source text to English", output[2])
+                unload.assert_called_once_with("url", "model", 30, True)
+
+    def test_strict_language_failure_still_unloads_the_model(self):
         node = refiner.OnekoOllamaPromptRefiner()
         with mock.patch.object(
             refiner,
@@ -246,6 +274,7 @@ class LanguageNormalizationTests(unittest.TestCase):
                     0.9,
                     430,
                     30,
+                    fallback_mode="strict",
                 )
         unload.assert_called_once_with("url", "model", 30, True)
 

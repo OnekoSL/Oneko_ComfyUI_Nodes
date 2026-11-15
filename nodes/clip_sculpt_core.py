@@ -77,10 +77,65 @@ def refine_token_weight(token_id, all_weights, method, intensity, top_k):
     return session.sculpt(token_id, method, intensity)
 
 
-def eligible_entries(tokens, stream_key, special_ids):
+def _chat_user_ranges(batch, tokenizer):
+    """Return only complete user turns; malformed chats are left untouched."""
+    token_ids = [
+        int(entry[0]) if entry and isinstance(entry[0], numbers.Integral) else None
+        for entry in batch
+    ]
+    start = tokenizer.encode("<|im_start|>", add_special_tokens=False)
+    end = tokenizer.encode("<|im_end|>", add_special_tokens=False)
+    if len(start) != 1 or len(end) != 1:
+        return []
+
+    def content_start(index, role):
+        header = tokenizer.encode("<|im_start|>" + role, add_special_tokens=False)
+        separator_index = index + len(header)
+        if token_ids[index:separator_index] != header or separator_index >= len(token_ids):
+            return None
+        separator_id = token_ids[separator_index]
+        if separator_id is None:
+            return None
+        separator = tokenizer.decode([separator_id])
+        # Newline runs can be merged by BPE. Keep the whole separator untouched.
+        if not separator.startswith("\n") or separator.strip():
+            return None
+        return separator_index + 1
+
+    starts = [index for index, token_id in enumerate(token_ids) if token_id == start[0]]
+    ranges = []
+    for turn, index in enumerate(starts):
+        next_start = starts[turn + 1] if turn + 1 < len(starts) else len(token_ids)
+        try:
+            turn_end = token_ids.index(end[0], index + 1, next_start)
+        except ValueError:
+            # Native templates deliberately end with an open assistant/think turn.
+            if turn == len(starts) - 1 and content_start(index, "assistant") is not None:
+                break
+            return []
+        user_start = content_start(index, "user")
+        if user_start is not None and user_start <= turn_end:
+            ranges.append((user_start, turn_end))
+    return ranges
+
+
+def eligible_entries(tokens, stream_key, special_ids, clip=None):
+    chat_stream = stream_key.startswith(("qwen35_", "qwen3vl_"))
+    tokenizer = None
+    if chat_stream:
+        stream_tokenizer = getattr(getattr(clip, "tokenizer", None), stream_key, None)
+        tokenizer = getattr(stream_tokenizer, "tokenizer", None)
+        if tokenizer is None:
+            return []
+        # Some structural tokens (including <think>) are added but not special.
+        special_ids = set(special_ids) | set(tokenizer.get_added_vocab().values()) | set(tokenizer.all_special_ids)
+
     coords = []
     for batch_index, batch in enumerate(tokens[stream_key]):
+        ranges = _chat_user_ranges(batch, tokenizer) if chat_stream else None
         for token_index, token_weight in enumerate(batch):
+            if ranges is not None and not any(start <= token_index < end for start, end in ranges):
+                continue
             if len(token_weight) < 2:
                 continue
             token_id = token_weight[0]
@@ -220,9 +275,10 @@ def sculpt_clip_token_sets(
                         stats[index]["streams"].append(f"{stream_key}: skipped unsupported")
                 continue
 
+        chat_policy = " (complete user turns only; unrecognized/incomplete chat skipped)" if stream_key.startswith(("qwen35_", "qwen3vl_")) else ""
         special_ids = special_token_ids(submodel)
         coords_by_set = [
-            eligible_entries(tokens, stream_key, special_ids) if stream_key in tokens else []
+            eligible_entries(tokens, stream_key, special_ids, clip=clip) if stream_key in tokens else []
             for tokens in token_sets
         ]
         unique_ids = list(
@@ -238,7 +294,7 @@ def sculpt_clip_token_sets(
                 continue
             stats[index]["eligible"] += len(coords)
             if not coords:
-                stats[index]["streams"].append(f"{stream_key}: 0 eligible")
+                stats[index]["streams"].append(f"{stream_key}: 0 eligible" + chat_policy)
                 continue
             sculpted, neighbors = _apply_session(
                 tokens,
@@ -253,7 +309,7 @@ def sculpt_clip_token_sets(
             )
             stats[index]["sculpted"] += sculpted
             stats[index]["neighbors"] += neighbors
-            stats[index]["streams"].append(f"{stream_key}: {len(coords)} eligible")
+            stats[index]["streams"].append(f"{stream_key}: {len(coords)} eligible" + chat_policy)
             stats[index]["search"].append(session.report())
 
         cache_entries = session.cache_entries

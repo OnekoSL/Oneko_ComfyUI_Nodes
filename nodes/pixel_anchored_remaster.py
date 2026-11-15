@@ -11,13 +11,13 @@ def _combo_default(options, preferred):
     return preferred if preferred in options else options[0]
 
 
-def _multiple_of_8(value):
-    return max(8, int(round(value)) // 8 * 8)
+def _aligned_size(value, alignment):
+    return max(alignment, int(round(value)) // alignment * alignment)
 
 
-def _scaled_size(width, height, scale):
+def _scaled_size(width, height, scale, alignment=8):
     scale = min(1.0, max(0.25, float(scale)))
-    return (_multiple_of_8(width * scale), _multiple_of_8(height * scale))
+    return (_aligned_size(width * scale, alignment), _aligned_size(height * scale, alignment))
 
 
 def _resize_image(image, width, height, method):
@@ -100,7 +100,7 @@ class OnekoPixelAnchoredRemaster:
     RETURN_NAMES = ("final_image", "downscaled_image", "remaster_latent", "seed", "settings_report")
     FUNCTION = "remaster"
     CATEGORY = "Oneko/06 Image/Upscale"
-    DESCRIPTION = "Anima-safe pixel downscale, tiled VAE encode, latent upscale, and low-denoise remaster pass."
+    DESCRIPTION = "Pixel downscale, tiled VAE encode, VAE-aware latent upscale, and low-denoise remaster pass. Supports factor-8 and factor-16 image VAEs, including MOSS/FLUX.2."
 
     def remaster(
         self,
@@ -124,14 +124,21 @@ class OnekoPixelAnchoredRemaster:
         use_reference_latent,
     ):
         _batch, input_h, input_w, _channels = image.shape
-        final_w = _multiple_of_8(input_w)
-        final_h = _multiple_of_8(input_h)
-        down_w, down_h = _scaled_size(input_w, input_h, pixel_scale)
+        encode_compression = vae.spacial_compression_encode()
+        decode_compression = vae.spacial_compression_decode()
+        # Preserve the previous Core LatentUpscale minimum of 64 pixels.
+        final_w = max(64, _aligned_size(input_w, decode_compression))
+        final_h = max(64, _aligned_size(input_h, decode_compression))
+        down_w, down_h = _scaled_size(input_w, input_h, pixel_scale, encode_compression)
 
         downscaled_image = _resize_image(image, down_w, down_h, pixel_method)
         encoded_latent = _first_output(VAEEncodeTiled().encode(vae, downscaled_image, vae_tile_size, vae_overlap))
-        remaster_latent = _first_output(
-            LatentUpscale().upscale(encoded_latent, latent_upscale_method, final_w, final_h, "disabled")
+        # Encoded image latents already have the VAE channel layout. Resize only
+        # their spatial dimensions; Core LatentUpscale assumes a fixed factor 8.
+        remaster_latent = encoded_latent.copy()
+        remaster_latent["samples"] = comfy.utils.common_upscale(
+            encoded_latent["samples"], final_w // decode_compression, final_h // decode_compression,
+            latent_upscale_method, "disabled",
         )
 
         work_positive = positive

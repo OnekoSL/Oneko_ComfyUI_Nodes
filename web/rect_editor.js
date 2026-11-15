@@ -162,20 +162,26 @@ function canvasArea(node, canvas) {
     };
 }
 
-function toPoint(event, node, canvas) {
+function canvasPoint(event, canvas) {
     const rect = canvas.getBoundingClientRect();
+    return {
+        x: (event.clientX - rect.left) * (canvas.clientWidth || 320) / rect.width,
+        y: (event.clientY - rect.top) * (canvas.clientHeight || 210) / rect.height,
+    };
+}
+
+function toPoint(event, node, canvas) {
+    const point = canvasPoint(event, canvas);
     const area = canvasArea(node, canvas);
     return {
-        x: clamp((event.clientX - rect.left - area.x) / area.w, 0, 1),
-        y: clamp((event.clientY - rect.top - area.y) / area.h, 0, 1),
+        x: clamp((point.x - area.x) / area.w, 0, 1),
+        y: clamp((point.y - area.y) / area.h, 0, 1),
     };
 }
 
 function insideArea(event, node, canvas) {
-    const rect = canvas.getBoundingClientRect();
+    const { x, y } = canvasPoint(event, canvas);
     const area = canvasArea(node, canvas);
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
     return x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h;
 }
 

@@ -1,8 +1,10 @@
+from contextlib import closing
 import json
 import math
 import os
 from pathlib import Path
 import re
+import tempfile
 
 import torch
 import numpy as np
@@ -662,6 +664,15 @@ class OnekoWan22SegmentStore:
             raise RuntimeError("OnekoWan22SegmentStore requires an IMAGE batch in BHWC format")
         if images.shape[0] < 1:
             raise RuntimeError("OnekoWan22SegmentStore received an empty image batch")
+        if images.shape[1] < 1 or images.shape[2] < 1 or images.shape[3] not in (1, 3, 4):
+            raise RuntimeError("OnekoWan22SegmentStore requires non-empty grayscale, RGB or RGBA frames")
+
+        # Validate replacement inputs before touching a previously saved run.
+        start_offset = 1 if bool(drop_first_frame) else 0
+        if int(images.shape[0]) <= start_offset:
+            raise RuntimeError("Wan segment has no frames left after drop_first_frame")
+        frames_to_store = images[start_offset:]
+        external_run_manifest = _parse_json_object(run_manifest_json, "run_manifest_json")
 
         run_id = _safe_run_id(run_id)
         segment_index = int(segment_index)
@@ -715,11 +726,6 @@ class OnekoWan22SegmentStore:
                 f"found {len(existing_files)}"
             )
 
-        start_offset = 1 if bool(drop_first_frame) else 0
-        if int(images.shape[0]) <= start_offset:
-            raise RuntimeError("Wan segment has no frames left after drop_first_frame")
-
-        frames_to_store = images[start_offset:]
         first_frame_index = expected_start
         for offset, frame in enumerate(frames_to_store):
             _image_tensor_to_pil(frame).save(frames_dir / f"frame_{first_frame_index + offset:06d}.png")
@@ -730,7 +736,6 @@ class OnekoWan22SegmentStore:
         state_last_path = state_dir / "last_frame.png"
         _image_tensor_to_pil(frames_to_store[-1]).save(state_last_path)
 
-        external_run_manifest = _parse_json_object(run_manifest_json, "run_manifest_json")
         segment_manifest = {
             "schema": "oneko.wan22.segment.v1",
             "run_id": run_id,
@@ -904,6 +909,8 @@ class OnekoWan22FrameSequenceAssembler:
 
         run_id = _safe_run_id(run_id)
         fps = float(fps)
+        if not math.isfinite(fps) or fps <= 0:
+            raise ValueError("Wan FPS must be finite and greater than zero")
         run_dir = _run_dir(run_id)
         frames_dir = run_dir / "frames"
         manifests_dir = run_dir / "manifests"
@@ -925,25 +932,38 @@ class OnekoWan22FrameSequenceAssembler:
         if video_path.exists() and not bool(overwrite):
             raise RuntimeError(f"Wan output video already exists: {video_path}")
 
-        first_size = None
-        with imageio.get_writer(
-            str(video_path),
-            fps=fps,
-            codec=str(codec),
-            quality=int(quality),
-            macro_block_size=1,
-            ffmpeg_params=["-pix_fmt", "yuv420p"],
-        ) as writer:
-            for path in files:
-                with Image.open(path) as image:
-                    image = image.convert("RGB")
-                    if first_size is None:
-                        first_size = image.size
-                    elif image.size != first_size:
-                        raise RuntimeError(
-                            f"Wan frame size mismatch at {path.name}: expected {first_size}, found {image.size}"
-                        )
-                    writer.append_data(np.asarray(image))
+        # Encode alongside the destination, then replace it only after success.
+        # A malformed frame or encoder exception must not truncate an older video.
+        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{safe_name}-", suffix=".mp4", dir=videos_dir)
+        os.close(descriptor)
+        temporary_path = Path(temporary_name)
+        try:
+            first_size = None
+            with closing(imageio.get_writer(
+                str(temporary_path),
+                fps=fps,
+                codec=str(codec),
+                quality=int(quality),
+                macro_block_size=1,
+                pixelformat="yuv420p",
+            )) as writer:
+                for path in files:
+                    with Image.open(path) as image:
+                        image = image.convert("RGB")
+                        if first_size is None:
+                            first_size = image.size
+                        elif image.size != first_size:
+                            raise RuntimeError(
+                                f"Wan frame size mismatch at {path.name}: expected {first_size}, found {image.size}"
+                            )
+                        writer.append_data(np.asarray(image))
+            if video_path.exists() and not bool(overwrite):
+                raise RuntimeError(f"Wan output video already exists: {video_path}")
+            if temporary_path.stat().st_size == 0:
+                raise RuntimeError("Wan video encoder produced no output")
+            os.replace(temporary_path, video_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
         duration = len(files) / fps
         assembly_manifest = {

@@ -1,4 +1,5 @@
-from .clip_sculpt_core import NORMALIZATION_MODES, SCULPT_METHODS, sculpt_clip_tokens
+from .clip_sculpt_core import NORMALIZATION_MODES, SCULPT_METHODS, sculpt_clip_token_sets
+from .conditioning_context import attach_conditioning_context, capture_conditioning_context
 
 
 class OnekoCLIPSculptTextEncode:
@@ -32,7 +33,7 @@ class OnekoCLIPSculptTextEncode:
     FUNCTION = "encode"
     CATEGORY = "Oneko/03 Conditioning/Encode"
     DESCRIPTION = (
-        "SD1/SDXL CLIP text encoder with local Vector-Sculptor-style token embedding edits "
+        "CLIP/Qwen text encoder with local Vector-Sculptor-style user-token embedding edits "
         "and scheduled CLIP encoding support."
     )
 
@@ -40,15 +41,21 @@ class OnekoCLIPSculptTextEncode:
         if clip is None:
             raise RuntimeError("ERROR: A valid CLIP input is required.")
 
-        tokens, stats = sculpt_clip_tokens(
+        tokens = clip.tokenize(text)
+        context = capture_conditioning_context(clip, tokens)
+        token_sets, stats_sets = sculpt_clip_token_sets(
             clip,
-            text,
+            [tokens],
             sculptor_intensity,
             sculptor_method,
             token_normalization,
             top_k,
+            strict=False,
         )
-        conditioning = clip.encode_from_tokens_scheduled(tokens)
+        tokens, stats = token_sets[0], stats_sets[0]
+        conditioning = attach_conditioning_context(
+            clip.encode_from_tokens_scheduled(tokens), context
+        )
         if float(sculptor_intensity) == 0.0 and token_normalization == "none":
             report = "disabled"
         else:

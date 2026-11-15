@@ -1,3 +1,6 @@
+import logging
+import math
+
 import comfy.sample
 import comfy.samplers
 import comfy.utils
@@ -56,15 +59,15 @@ class OnekoHiResFixTiled:
                 "use_reference_latent": (
                     "BOOLEAN",
                     {
-                        "default": True,
-                        "tooltip": "Encode the upscaled image and attach it to positive conditioning as a reference latent.",
+                        "default": False,
+                        "tooltip": "Experimental extra reference conditioning, not ordinary img2img image preservation. Requires a checkpoint trained for compatible references. With factor-16 VAEs, uses the full upscaled image; smaller tiles do not reduce its reference memory.",
                     },
                 ),
                 "use_differential_diffusion": (
                     "BOOLEAN",
                     {
                         "default": True,
-                        "tooltip": "Patch the model with Differential Diffusion before tiled refinement.",
+                        "tooltip": "Patch the model with Differential Diffusion. Progressive masking requires a sampler noise_mask, which USDU 1.7.2 does not supply here.",
                     },
                 ),
                 "differential_strength": (
@@ -84,7 +87,7 @@ class OnekoHiResFixTiled:
                     NOISE_TYPES,
                     {
                         "default": "gaussian",
-                        "tooltip": "Initial tile noise distribution. gaussian with auto device and strength 1.0 matches ComfyUI core noise.",
+                        "tooltip": "Used only when noise_profile is gaussian. Set both noise_type and noise_profile to gaussian, with auto device and strength 1.0, for ComfyUI core noise.",
                     },
                 ),
                 "noise_strength": (
@@ -101,7 +104,7 @@ class OnekoHiResFixTiled:
                     UNIVERSAL_NOISE_PROFILES,
                     {
                         "default": "gaussian",
-                        "tooltip": "Universal tile noise profile. Leave as gaussian to preserve legacy noise_type behavior.",
+                        "tooltip": "A non-gaussian profile overrides noise_type. gaussian delegates to noise_type; set both to gaussian for ordinary Gaussian noise.",
                     },
                 ),
                 "detail_bias": (
@@ -152,6 +155,19 @@ class OnekoHiResFixTiled:
         noise_profile="gaussian",
         detail_bias=0.35,
     ):
+        compression = int(vae.spacial_compression_encode())
+        if compression == 16 and any(
+            metadata.get("reference_latents")
+            for conditioning in (positive, negative) for _, metadata in conditioning
+        ):
+            raise ValueError(
+                "HiResFix Tiled cannot safely crop external reference_latents with a factor-16 VAE "
+                "through Ultimate SD Upscale. Remove external references for ordinary img2img. "
+                "Use this node's full-image reference option only with a reference-compatible checkpoint."
+            )
+        alignment = math.lcm(8, compression)
+        tile_width = math.ceil((tile_width + tile_padding) / alignment) * alignment - tile_padding
+        tile_height = math.ceil((tile_height + tile_padding) / alignment) * alignment - tile_padding
         upscaled_image = _first_output(ImageUpscaleWithModel.execute(upscale_model, image))
 
         work_model = model
@@ -159,21 +175,30 @@ class OnekoHiResFixTiled:
             work_model = _first_output(DifferentialDiffusion.execute(work_model, differential_strength))
 
         work_positive = positive
+        full_image_reference = None
         if use_reference_latent:
             latent = _first_output(VAEEncode().encode(vae, upscaled_image))
-            work_positive = _first_output(ReferenceLatent.execute(work_positive, latent))
+            if compression == 16:
+                # USDU crops references with a fixed factor 8 and only the first
+                # tile region. Attach our full-image reference after that crop.
+                full_image_reference = latent
+            else:
+                work_positive = _first_output(ReferenceLatent.execute(work_positive, latent))
 
         usdu_class = _load_ultimate_sd_upscale_no_upscale()
         usdu_node = usdu_class()
         processing_globals = _get_usdu_processing_globals(usdu_class)
         original_sample = processing_globals["sample"]
         resolved_noise_profile = _resolve_noise_profile(noise_type, noise_profile)
-        processing_globals["sample"] = _make_usdu_noise_sample(
+        tile_sample = _make_usdu_noise_sample(
             noise_device,
             resolved_noise_profile,
             noise_strength,
             detail_bias,
+            reference_latent=full_image_reference,
+            warn_missing_noise_mask=use_differential_diffusion,
         )
+        processing_globals["sample"] = tile_sample
         try:
             final_image = _first_output(
                 usdu_node.upscale(
@@ -205,6 +230,14 @@ class OnekoHiResFixTiled:
             )
         finally:
             processing_globals["sample"] = original_sample
+            if tile_sample.missing_noise_mask:
+                # USDU suppresses root logging during its tile loop. Report only
+                # after it restores logging, once for this whole invocation.
+                logging.warning(
+                    "Oneko HiResFix: Ultimate SD Upscale supplied no noise_mask; "
+                    "Differential Diffusion cannot apply progressive masking to these tiles. "
+                    "USDU still composites the decoded tiles with its pixel-space masks."
+                )
 
         return (final_image, upscaled_image, seed)
 
@@ -221,7 +254,8 @@ def _resolve_noise_profile(noise_type, noise_profile):
     return noise_profile
 
 
-def _make_usdu_noise_sample(noise_device, noise_profile, noise_strength, detail_bias):
+def _make_usdu_noise_sample(noise_device, noise_profile, noise_strength, detail_bias,
+                            reference_latent=None, warn_missing_noise_mask=False):
     def sample(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent, denoise, custom_sampler, custom_sigmas):
         latent_samples = latent["samples"]
         fixed_samples = comfy.sample.fix_empty_latent_channels(
@@ -243,6 +277,19 @@ def _make_usdu_noise_sample(noise_device, noise_profile, noise_strength, detail_
         noise_mask = None
         if "noise_mask" in work_latent:
             noise_mask = work_latent["noise_mask"]
+
+        if noise_mask is None and warn_missing_noise_mask:
+            sample.missing_noise_mask = True
+
+        if reference_latent is not None:
+            reference = reference_latent["samples"]
+            # USDU batches image-major: all tile regions of image 0, then image 1.
+            tile_count, remainder = divmod(fixed_samples.shape[0], reference.shape[0])
+            if remainder or tile_count < 1:
+                raise ValueError("HiResFix tile batch does not match the full-image reference batch.")
+            if tile_count > 1:
+                reference = reference.repeat_interleave(tile_count, dim=0)
+            positive = _first_output(ReferenceLatent.execute(positive, {"samples": reference}))
 
         callback = latent_preview.prepare_callback(model, steps)
         disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
@@ -268,6 +315,7 @@ def _make_usdu_noise_sample(noise_device, noise_profile, noise_strength, detail_
         out["samples"] = samples
         return out
 
+    sample.missing_noise_mask = False
     return sample
 
 
