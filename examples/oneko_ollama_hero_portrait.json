@@ -1,0 +1,507 @@
+{
+  "id": "b481becf-2cd9-4d7c-8358-da2b34f61b25",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 4,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "OnekoOllamaHeroPortrait",
+      "title": "Ollama Hero Portrait (Oneko)",
+      "pos": [
+        80,
+        100
+      ],
+      "size": [
+        680,
+        1700
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pose",
+          "type": "STRING",
+          "widget": {
+            "name": "pose"
+          },
+          "link": null
+        },
+        {
+          "name": "background",
+          "type": "STRING",
+          "widget": {
+            "name": "background"
+          },
+          "link": null
+        },
+        {
+          "name": "additional_details",
+          "type": "STRING",
+          "widget": {
+            "name": "additional_details"
+          },
+          "link": null
+        },
+        {
+          "name": "framing",
+          "type": "COMBO",
+          "widget": {
+            "name": "framing"
+          },
+          "link": null
+        },
+        {
+          "name": "view",
+          "type": "COMBO",
+          "widget": {
+            "name": "view"
+          },
+          "link": null
+        },
+        {
+          "name": "art_style",
+          "type": "COMBO",
+          "widget": {
+            "name": "art_style"
+          },
+          "link": null
+        },
+        {
+          "name": "expression",
+          "type": "COMBO",
+          "widget": {
+            "name": "expression"
+          },
+          "link": null
+        },
+        {
+          "name": "lighting",
+          "type": "COMBO",
+          "widget": {
+            "name": "lighting"
+          },
+          "link": null
+        },
+        {
+          "name": "equipment_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "equipment_mode"
+          },
+          "link": null
+        },
+        {
+          "name": "detail_policy",
+          "type": "COMBO",
+          "widget": {
+            "name": "detail_policy"
+          },
+          "link": null
+        },
+        {
+          "name": "prompt_format",
+          "type": "COMBO",
+          "widget": {
+            "name": "prompt_format"
+          },
+          "link": null
+        },
+        {
+          "name": "output_language",
+          "type": "COMBO",
+          "widget": {
+            "name": "output_language"
+          },
+          "link": null
+        },
+        {
+          "name": "ollama_url",
+          "type": "STRING",
+          "widget": {
+            "name": "ollama_url"
+          },
+          "link": null
+        },
+        {
+          "name": "ollama_model",
+          "type": "COMBO",
+          "widget": {
+            "name": "ollama_model"
+          },
+          "link": null
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "name": "temperature",
+          "type": "FLOAT",
+          "widget": {
+            "name": "temperature"
+          },
+          "link": null
+        },
+        {
+          "name": "top_p",
+          "type": "FLOAT",
+          "widget": {
+            "name": "top_p"
+          },
+          "link": null
+        },
+        {
+          "name": "context_length",
+          "type": "COMBO",
+          "widget": {
+            "name": "context_length"
+          },
+          "link": null
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "INT",
+          "widget": {
+            "name": "timeout_seconds"
+          },
+          "link": null
+        },
+        {
+          "name": "unload_after_run",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "unload_after_run"
+          },
+          "link": null
+        },
+        {
+          "name": "document_path",
+          "type": "STRING",
+          "widget": {
+            "name": "document_path"
+          },
+          "link": null
+        },
+        {
+          "name": "document_text",
+          "type": "STRING",
+          "widget": {
+            "name": "document_text"
+          },
+          "link": null
+        },
+        {
+          "name": "hero_name",
+          "type": "STRING",
+          "widget": {
+            "name": "hero_name"
+          },
+          "link": null
+        },
+        {
+          "name": "prompt_detail",
+          "type": "COMBO",
+          "widget": {
+            "name": "prompt_detail"
+          },
+          "link": null
+        },
+        {
+          "name": "term_explanations",
+          "type": "STRING",
+          "widget": {
+            "name": "term_explanations"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "STRING",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "negative",
+          "type": "STRING",
+          "links": [
+            2
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "character_summary",
+          "type": "STRING",
+          "links": [
+            3
+          ],
+          "slot_index": 2
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": [
+            4
+          ],
+          "slot_index": 3
+        },
+        {
+          "name": "filename_hero_name",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 4
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "OnekoOllamaHeroPortrait"
+      },
+      "widgets_values": [
+        "Steht entspannt, eine Hand am Umhangverschluss, blickt aufmerksam zur Seite.",
+        "Ein stiller Waldweg mit moosigen Steinen und weichem Morgenlicht.",
+        "",
+        "Bis zum Bauch",
+        "Dreiviertelansicht",
+        "Fantasy-Illustration",
+        "Aus Held und Pose",
+        "Passend zur Szene",
+        "Sichtbare Ausrüstung",
+        "Dokumenttreu",
+        "Natürliche Sprache",
+        "Englisch",
+        "http://127.0.0.1:11434",
+        "autoren-darkidol-llama-3-1-8b:latest",
+        0,
+        "fixed",
+        0.5,
+        0.9,
+        "8192",
+        180,
+        true,
+        "",
+        "Beispielheldin Liora: 30 Jahre alte elfische Botin, weiblich, 178 cm, schlanke Gestalt, spitze Ohren, graue Augen und langes dunkelbraunes Haar. Sie trägt einen dunkelgrünen Wollumhang, ein schlichtes Leinenhemd, einen braunen Ledergürtel und robuste Stiefel. Ein kleiner silberner Blattanhänger ist ihr einziges Schmuckstück.",
+        "",
+        "Ausführlich",
+        ""
+      ],
+      "widgets_values_named": {
+        "pose": "Steht entspannt, eine Hand am Umhangverschluss, blickt aufmerksam zur Seite.",
+        "background": "Ein stiller Waldweg mit moosigen Steinen und weichem Morgenlicht.",
+        "additional_details": "",
+        "framing": "Bis zum Bauch",
+        "view": "Dreiviertelansicht",
+        "art_style": "Fantasy-Illustration",
+        "expression": "Aus Held und Pose",
+        "lighting": "Passend zur Szene",
+        "equipment_mode": "Sichtbare Ausrüstung",
+        "detail_policy": "Dokumenttreu",
+        "prompt_format": "Natürliche Sprache",
+        "output_language": "Englisch",
+        "ollama_url": "http://127.0.0.1:11434",
+        "ollama_model": "autoren-darkidol-llama-3-1-8b:latest",
+        "seed": 0,
+        "control_after_generate": "fixed",
+        "temperature": 0.5,
+        "top_p": 0.9,
+        "context_length": "8192",
+        "timeout_seconds": 180,
+        "unload_after_run": true,
+        "document_path": "",
+        "document_text": "Beispielheldin Liora: 30 Jahre alte elfische Botin, weiblich, 178 cm, schlanke Gestalt, spitze Ohren, graue Augen und langes dunkelbraunes Haar. Sie trägt einen dunkelgrünen Wollumhang, ein schlichtes Leinenhemd, einen braunen Ledergürtel und robuste Stiefel. Ein kleiner silberner Blattanhänger ist ihr einziges Schmuckstück.",
+        "hero_name": "",
+        "prompt_detail": "Ausführlich",
+        "term_explanations": ""
+      }
+    },
+    {
+      "id": 2,
+      "type": "PreviewAny",
+      "title": "Positiver Porträt-Prompt",
+      "pos": [
+        850,
+        100
+      ],
+      "size": [
+        650,
+        350
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 3,
+      "type": "PreviewAny",
+      "title": "Negativer Prompt",
+      "pos": [
+        850,
+        510
+      ],
+      "size": [
+        650,
+        350
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "PreviewAny",
+      "title": "Ausgelesene Charakterdaten",
+      "pos": [
+        850,
+        920
+      ],
+      "size": [
+        650,
+        350
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 5,
+      "type": "PreviewAny",
+      "title": "Verarbeitungsbericht",
+      "pos": [
+        850,
+        1330
+      ],
+      "size": [
+        650,
+        350
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      1,
+      1,
+      3,
+      0,
+      "STRING"
+    ],
+    [
+      3,
+      1,
+      2,
+      4,
+      0,
+      "STRING"
+    ],
+    [
+      4,
+      1,
+      3,
+      5,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

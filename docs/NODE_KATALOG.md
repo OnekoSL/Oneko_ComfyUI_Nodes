@@ -1,6 +1,6 @@
 # Node-Katalog: Oneko 0.2.1
 
-45 öffentliche Nodes in Version 0.2.1, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
+46 öffentliche Nodes im aktuellen Entwicklungsstand auf Basis von Version 0.2.1, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
 
 ## Oneko/01 Loaders
 
@@ -16,10 +16,21 @@ Der Diffusion/CLIP/VAE-Cycler übernimmt die CLIP-Typauswahl aus dem installiert
 | Node-ID | Anzeigename | Ausgänge |
 |---|---|---|
 | `OnekoOllamaPromptRefiner` | [Ollama Prompt Refiner (Oneko)](../nodes/ollama_prompt_refiner.py) | `STRING, STRING, STRING, STRING, STRING, STRING, STRING, STRING` |
+| `OnekoOllamaHeroPortrait` | [Ollama Hero Portrait (Oneko)](../nodes/ollama_hero_portrait.py) | `STRING positive, STRING negative, STRING character_summary, STRING report, STRING filename_hero_name` |
 | `OnekoOllamaVideoPromptRefiner` | [Ollama Video Prompt Refiner (Oneko)](../nodes/ollama_video_prompt_refiner.py) | `STRING, STRING, STRING` |
 | `OnekoOllamaVisionCaptioner` | [Ollama Vision Captioner (Oneko)](../nodes/ollama_vision_captioner.py) | `STRING, STRING, STRING, STRING, STRING` |
 
 Der **Ollama Prompt Refiner** bietet mit `target_profile=moss_image` ein eigenes Profil für natürliche MOSS-Szenenbeschreibungen. Es beschreibt Mengen, räumliche Beziehungen und sichtbare Beschriftungen konkret, ohne das Krea2-Wortbudget zu übernehmen. Die acht Ausgänge und ihre Reihenfolge bleiben unverändert; `positive` beginnt mit dem Motiv und verbindet anschließend Umgebung und Stil. Die bestehende Übersetzung deutscher oder gemischter Eingaben ins Englische bleibt aktiv; erkannter sichtbarer Bildtext und der feste `style_anchor` werden erhalten. Ein leerer Negativprompt ist zulässig, es wird keine automatische Negativliste ergänzt. [Bedienung und Beispiel](../examples/README.md#moss-ollama-prompt-refiner).
+
+Der **Ollama Hero Portrait** erzeugt aus einem Helden-Software-XML oder einer Textbeschreibung einen Porträt-Prompt. Pose und Hintergrund haben eigene Textfelder; Bildausschnitt, Ansicht, Stil, Ausdruck, Licht und Ausrüstungsumfang werden per Menü gewählt. Ollama übersetzt einzelne Angaben und wählt vorhandene Inventareinträge; die Node setzt den Prompt mit den vorgegebenen Bildmerkmalen zusammen. Pflichtangaben und Inventarverweise werden geprüft, Amaunir und Firnelfen erhalten eine knappe visuelle Spezieserklärung. Die Übersetzungsgenauigkeit bleibt modellabhängig. `document_text` hat Vorrang vor `document_path`; bei mehreren Helden wählt `hero_name` den Eintrag. Änderungen am Dateiinhalt lösen eine neue Ausführung aus. Der fünfte Ausgang `filename_hero_name` liefert den dateitauglichen Namen des eingelesenen Helden; mit `filename_modelname` des Bildmodell-Loaders lässt er sich zum Speicherpräfix kombinieren. Die bisherigen vier Ausgänge, Eingabefelder sowie der gemeinsame Ollama-Transport und dessen Entladefunktion bleiben erhalten. [Bedienung und Beispiel](../examples/README.md#ollama-hero-portrait).
+
+**Ausführlichkeit** steuert knappe oder ausführliche Beschreibungen vorhandener Fakten. **Begriffserklärungen** ergänzt ein kleines geprüftes Wörterbuch für aventurische Begriffe mit eigenen Zeilen `Begriff = Beschreibung`. Die Originaldaten und Dateinamen bleiben unverändert; verwendete Auflösungen erscheinen im Bericht. Der Standard ist **Ausführlich**. Alle bisherigen Widgetpositionen bleiben erhalten.
+
+Die Stilvorgabe steht am Promptanfang und verwendet dieselbe Definition im Ollama-Brief und in der Ausgabe. **Fantasy-Illustration** beschreibt eine malerische Fantasy-Buchillustration mit Pinselstruktur und speziesgerechten Proportionen; passende Stilausschlüsse ergänzen den Negativ-Prompt. **Anime**, **Comic** und **Eigene Vorgabe** werden nicht durch pauschale Anime-Ausschlüsse beschränkt. Die sichtbare Stilwirkung bleibt vom Bildmodell und der nachgeschalteten Pipeline abhängig.
+
+Der integrierte **Datei-Cycler** bietet dieselben Frontend-Modi wie der Modell-Cycler, einschließlich `increment-wrap`, Dateifilter und **Aufträge pro Datei**. Er arbeitet mit XML-/TXT-Originaldateien im ausgewählten Ordner. `fixed` ist der kompatible Standard. Die Dateiliste wird vorab geladen; jeder erfolgreich eingereihte Auftrag zählt einzeln. Der Wiederholungswert ermöglicht mehrere Modelle pro Held. Bestehende Eingänge, Ausgänge und gespeicherte Widgetpositionen bleiben erhalten; die zusätzlichen UI-Einstellungen werden als Node-Eigenschaften gespeichert. [Bedienung](../examples/README.md#ollama-hero-portrait).
+
+**Heldendatei auswählen …** ergänzt einen Dialog mit Laufwerks- und Ordnernavigation sowie Dateinamenfilter. Er öffnet den bisherigen Dateiordner und übernimmt den Originalpfad ohne Kopie; alter eingefügter Text wird beim Dateiwechsel geleert. Bestehende Workflow-Eingänge und ihre gespeicherten Positionen bleiben erhalten.
 
 ## Oneko/02 Text/Vocabulary
 

@@ -1,5 +1,19 @@
 # Validierungsstand
 
+## Heldenporträt: Apostrophe und numerische Fakten — 17.11.2026
+
+Der gemeldete Abbruch bei einem Dateinamen mit Apostrophen stammt laut Ausführungshistorie aus der Prüfung fehlender Zahlenangaben in `identity`, nicht vom Dateizugriff. Die Originaldatei wird unverändert gelesen. Numerisches Alter ist nun ein separater kanonischer Baustein; numerische Größe und Gewicht erhalten ebenfalls feste Formulierungen. Vor der Zahlenprüfung werden vorhandene kanonische Übersetzungen lokal eingesetzt, wie bereits bei der endgültigen Promptzusammensetzung. Nichtleere Textwerte und vollständige Antwortstruktur bleiben Pflicht.
+
+**271 ausgewählte Python-Tests bestanden** (`hero or oneko_package`, CPU), darunter ein Apostroph-/Umlaut-Dateipfad, im Modelltext ausgelassenes Alter und Körpermaße, unveränderte Quellzusammenfassung, explizite Altersüberschreibung, unstrukturierte Angaben sowie Cores tatsächliches Speichern von zwei kleinen Testbildern mit Apostrophen im Heldennamen. **64 JavaScript-Tests bestanden**, einschließlich neuer Auswahl- und Rotationsfälle mit fünf Aufträgen pro Datei, beiden nativen Queue-Zeitpunkten und Wrap. Die reale Verzeichnis-API erhält denselben Dateipfad unverändert.
+
+Die lokale Prüfung bestätigt, dass numerische Angaben zu Alter, Größe und Gewicht aus dem XML als feste Fakten in den Prompt übernommen werden. Ollama-Antworten in der Regression sind simuliert; kein neuer Ollama-/GPU-Generierungslauf. Die beschäftigte Benutzerinstanz wurde nicht neu gestartet, daher wird die Python-Korrektur dort erst beim nächsten Neustart aktiv.
+
+## Heldenporträt: Frontend-Ladung, Dateiauswahl und Rotation — 16.11.2026
+
+**61 JavaScript-Tests bestanden** mit `node --test tests/test_hero_file_picker.mjs tests/test_hero_file_cycle.mjs tests/test_hero_detail_migration.mjs tests/test_hero_frontend_imports.mjs`. Die neuen Importtests verbinden den echten ESM-Modulgraphen mit Core-Testdoubles: aktuelle Versions-URLs umgehen einen simulierten alten MJS-Cache, beide Importwege teilen dieselbe Picker-Modulinstanz, Dateiauswahl und Cycler werden einmalig installiert. Die Gegenprobe ohne Versionsqueries reproduziert den fehlenden Migrationsexport und damit die vollständig ausgefallene Erweiterungsregistrierung. Der Pickerbutton ist auf beiden von ComfyUI verwendeten Ebenen nicht serialisierbar.
+
+Im laufenden Browser nach normalem Neuladen geprüft: Dateidialog öffnet, lädt den Heldenordner und übernimmt eine XML-Datei korrekt in `document_path`; der zuvor als Text eingegebene Pfad wird dabei geleert. Alle fünf Rotationsmodi sowie Dateifilter und Aufträge pro Datei sind wieder sichtbar. Keine hero-bezogenen Browserfehler nach dem Neuladen. Die automatische Fortschaltung bleibt zusätzlich durch die bestehenden Tests für Queue-Erfolg, Fehler, Wiederholungen und gespeicherte Einstellungen abgedeckt; für diese Reparatur wurde keine Bildgenerierung gestartet und der ComfyUI-Server nicht neu gestartet.
+
 ## Späte Detailkorrektur im Universal Noise Sampler Advanced — 15.11.2026
 
 **Gesamte Python-Suite: 1.165 Tests und 66 Untertests bestanden, 25,50 s.** Die neue Datei `tests/test_late_sampling_detail.py` ergänzt 18 Fälle. Native MOSS-CPU-Läufe mit Euler/Heun und CFG 1/2.5 bestätigen den identischen frühen Sampling-Verlauf, unveränderte Zahl der Modellvorhersagen, erhaltene Masken/Metadaten sowie den exakt neutralen Zustand bei Stärke 0. Bestehende Post-CFG-Callbacks bleiben erhalten; Fehlerpfade und gleichzeitig ausgeführte Detailcallbacks hinterlassen keine Hooks am ursprünglichen Guider/ModelPatcher.

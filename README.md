@@ -1,6 +1,6 @@
 # Oneko ComfyUI Nodes
 
-Eine kuratierte Sammlung von **45 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.1** behebt die globalen USDU-/Preview-Eingriffe und stellt die Node-Anzahl klar. Enthalten sind weiterhin der modulare Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung. Experimentelles DiT Block Noise ist für Anima, AuraFlow und MOSS-Image verfügbar. [Änderungen in 0.2.1](CHANGELOG.md#021--2026-11-15).
+Eine kuratierte Sammlung von **46 Nodes im aktuellen Entwicklungsstand** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.1** behebt die globalen USDU-/Preview-Eingriffe und stellt die damalige Node-Anzahl klar. Enthalten sind weiterhin der modulare Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung. Experimentelles DiT Block Noise ist für Anima, AuraFlow und MOSS-Image verfügbar. Neu im Entwicklungsstand: **Ollama Hero Portrait** für Helden-XML/Text, Pose, Hintergrund und wählbare Porträtausschnitte ([Beispiel und Bedienung](examples/README.md#ollama-hero-portrait)). [Änderungen in 0.2.1](CHANGELOG.md#021--2026-11-15).
 
 Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung. Registrierung, Anzeigenamen, Menüs, Frontend-Erweiterungen und Ollama-Route verwenden Oneko. Das Paket enthält seine Implementierungen selbst und importiert das alte Nukun-Paket nicht.
 
@@ -9,7 +9,7 @@ Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung.
 | Bereich | Nodes | Schwerpunkt |
 |---|---:|---|
 | Loader | 2 | Checkpoint-Cycler und Diffusion/CLIP/VAE-Cycler |
-| Text und Ollama | 6 | Vokabular, MiniMax-H3-Promptaufbau, Bild-/Videoprompts und Captioning |
+| Text und Ollama | 7 | Vokabular, MiniMax-H3-Promptaufbau, Heldenporträts, Bild-/Videoprompts und Captioning |
 | Conditioning | 5 | CLIP Sculpt, T5/Qwen-Ausgleich, Diagnose und Anpassung |
 | Regionen | 6 | Split-/Rechteckmasken, Prompt-Encoding und natives Conditioning |
 | Sampling | 5 | Universal KSampler, zwei Guider-Varianten, Noise Profile Cycler und Empty Latent Aspect Ratio |

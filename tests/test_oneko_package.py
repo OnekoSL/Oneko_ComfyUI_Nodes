@@ -15,7 +15,7 @@ from Oneko_ComfyUI_Nodes.tools.migrate_workflow import migrate_workflow
 
 
 def test_package_contracts_and_frontend_targets():
-    assert len(package.NODE_CLASS_MAPPINGS) == 45
+    assert len(package.NODE_CLASS_MAPPINGS) == 46
     assert package.NODE_CLASS_MAPPINGS.keys() == package.NODE_DISPLAY_NAME_MAPPINGS.keys()
     for name, cls in package.NODE_CLASS_MAPPINGS.items():
         assert name.startswith("Oneko")
@@ -25,7 +25,7 @@ def test_package_contracts_and_frontend_targets():
     mapping = json.loads((repo / "migration/node_id_map.json").read_text(encoding="utf-8"))
     assert set(package.NODE_CLASS_MAPPINGS) - set(mapping.values()) == {
         "OnekoAudioTrackSettings", "OnekoAudioTimelineMixer", "OnekoOllamaVerseMaker", "OnekoEmptyLatentAspectRatio",
-        "OnekoDiTBlockNoisePatch",
+        "OnekoDiTBlockNoisePatch", "OnekoOllamaHeroPortrait",
     }
     frontend = "\n".join(f.read_text(encoding="utf-8") for f in (repo / "web").iterdir())
     assert "/oneko/ollama/models" in frontend

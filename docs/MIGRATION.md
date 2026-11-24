@@ -1,5 +1,25 @@
 # Migration zu Oneko
 
+## Heldenporträt: verlässliche Zahlenangaben
+
+Numerische Altersangaben werden als eigener fester Textbaustein aus dem Dokument übernommen; numerische Größe und Gewicht werden ebenfalls lokal formuliert. Damit kann eine ausgelassene oder ausgeschriebene Modellübersetzung dieser Werte keinen Serienabbruch mehr verursachen. Explizite Altersänderungen über Zusatzvorgaben bleiben möglich. Unstrukturierte Angaben werden weiterhin übersetzt und geprüft. Eingänge, Ausgänge und gespeicherte Widgetpositionen bleiben gleich; der Cache-Stand wird erhöht. Die Python-Korrektur benötigt einen ComfyUI-Neustart nach Abschluss laufender Aufträge.
+
+## Heldenporträt: Dateiauswahl und Rotation wieder sichtbar
+
+Die Frontend-Helfer werden gemeinsam versioniert geladen, damit ein Update keine neue JavaScript-Einstiegsdatei mit älteren zwischengespeicherten Modulen verbindet. Nach dieser reinen Frontend-Korrektur genügt das Neuladen der Browserseite; ein ComfyUI-Neustart ist nicht erforderlich. Die Node muss nicht ersetzt werden. Der Dateiauswahlbutton speichert außerdem keinen zusätzlichen Positionswert mehr im Workflow. Gespeicherte Rotationsoptionen bleiben in den Node-Eigenschaften erhalten.
+
+## Heldenporträt: ausführliche Beschreibungen und Begriffserklärungen
+
+Die optionalen Eingänge `prompt_detail` (**Ausführlichkeit**) und `term_explanations` (**Begriffserklärungen**) werden hinter den bisherigen Eingängen ergänzt. Die bisherigen Widgetpositionen und alle fünf Ausgänge bleiben erhalten. Der Standard ist **Ausführlich**, auch für API-Aufträge ohne den neuen Parameter; **Kompakt** fordert die bisherige knappe Beschreibung an. Fachbegriffe werden in allen Modi aufgelöst. Ausführliche Modi verwenden für vorhandene freie Beschreibungsfelder einen zusätzlichen Ollama-Schritt; Fehler dort erhalten die validierte Erstbeschreibung mit einem Hinweis im Bericht. Das Modell wird nach dem gesamten Ablauf entladen. ComfyUI nach Abschluss laufender Aufträge neu starten und die Browserseite mit **Strg+F5** neu laden.
+
+Berufsangaben werden getrennt von Spezies, Alter und Geschlecht verarbeitet. Ein kleines geprüftes Wörterbuch löst bekannte Begriffe in verständliche Beschreibungen auf; eigene Zeilen `Begriff = Beschreibung` haben bei exakter Übereinstimmung Vorrang. Die Quelldaten in `character_summary` und der Dateiname bleiben unverändert. `report` nennt tatsächlich verwendete Auflösungen und nicht geklärte Spezialisierungen bekannter Grundberufe. **Dokumenttreu** erlaubt auch bei mehr Text keine erfundenen Charaktermerkmale; feste Farben und Inventarbezeichnungen bleiben geschützt. [Bedienung und Quellen](../examples/README.md#ollama-hero-portrait).
+
+## Heldenporträt: Heldenname im Bilddateinamen
+
+`OnekoOllamaHeroPortrait` hat den zusätzlichen fünften STRING-Ausgang `filename_hero_name` (Index 4). Die bisherigen vier Ausgänge behalten ihre Indizes, alle Eingaben und Widgetpositionen bleiben unverändert. ComfyUI nach Abschluss laufender Aufträge neu starten und die Oberfläche mit **Strg+F5** neu laden.
+
+Für automatische Serien `filename_hero_name` und `filename_modelname` des Bildmodell-Loaders mit **Concatenate Text**, Trennzeichen `__`, verbinden. Das Ergebnis an `Save Image.filename_prefix` anschließen oder zuvor den bisherigen Ausgabeordner voranstellen. Beide Namen stammen aus dem tatsächlich ausgeführten Auftrag; bereits weitergeschaltete Auswahlfelder beeinflussen den gespeicherten Namen nicht. Der Name wird lokal aus dem Heldendokument gelesen. Der Bildmodellname ist kein Eingang der Ollama-Node, sodass ein Modellwechsel allein keine zusätzliche Promptübersetzung auslöst. [Bedienung und Ersatznamen](../examples/README.md#ollama-hero-portrait).
+
 ## Universal Noise Sampler Advanced: dosierbare Noise-Profile
 
 Die nachfolgenden optionalen Regler `detail_boost` und `detail_start` ergänzen eine späte Detailkorrektur während des Samplings. Neue Nodes starten mit **0.10 / 0.65**. Bereits gespeicherte Werte werden übernommen; API-Prompts ohne `detail_boost` verwenden weiterhin den neutralen Python-Fallback 0. Die bisherigen Widgets einschließlich `profile_blend` bleiben an ihren Positionen. Für Vergleiche Seed, `detail_bias`, Modell und Sampling-Einstellungen festhalten. Ein späterer Start begrenzt den Eingriff stärker. ComfyUI neu starten und die Oberfläche neu laden, um die neuen Standardwerte zu laden. [Funktionsumfang und Grenzen](NODE_KATALOG.md#oneko05-sampling).
