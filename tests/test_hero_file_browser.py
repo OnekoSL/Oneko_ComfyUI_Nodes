@@ -1,11 +1,20 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import folder_paths
 
 from Oneko_ComfyUI_Nodes.nodes import hero_file_browser as browser
+from Oneko_ComfyUI_Nodes.nodes import hero_document as document
+
+
+@pytest.fixture(autouse=True)
+def core_input_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(tmp_path))
+    monkeypatch.setattr(folder_paths, "base_path", str(tmp_path))
 
 
 def test_lists_only_hero_files_and_folders_in_natural_order_without_modifying_files(tmp_path):
@@ -31,13 +40,12 @@ def test_existing_document_opens_its_parent_and_preserves_selection(tmp_path):
     result = browser.list_hero_files(f'"{source}"')
     assert result["directory"] == str(tmp_path)
     assert result["selected"] == str(source)
-    assert result["parent"] == str(tmp_path.parent)
+    assert result["parent"] is None
 
 
-def test_empty_path_uses_comfy_input_directory(tmp_path, monkeypatch):
-    monkeypatch.setattr(browser.folder_paths, "get_input_directory", lambda: str(tmp_path))
+def test_empty_path_uses_comfy_input_directory(tmp_path):
     assert browser.list_hero_files()["directory"] == str(tmp_path)
-    assert browser.list_hero_files("  ", input_directory=tmp_path)["directory"] == str(tmp_path)
+    assert browser.list_hero_files("  ")["directory"] == str(tmp_path)
 
 
 @pytest.mark.parametrize("path", ["relative/path", "https://example.com/hero.xml", "file:///J:/hero.xml", "bad\0path"])
@@ -68,36 +76,92 @@ def test_unreadable_directory_reports_access_denied(tmp_path, monkeypatch):
 
 
 def test_inaccessible_child_does_not_hide_other_files(tmp_path, monkeypatch):
-    class Unreadable:
-        def is_dir(self):
+    (tmp_path / "Held.xml").write_bytes(b"<held></held>")
+    unavailable = tmp_path / "Unavailable.xml"
+    unavailable.write_bytes(b"<held/>")
+    original_stat = Path.stat
+
+    def stat_with_inaccessible_child(path, *args, **kwargs):
+        if path == unavailable:
             raise PermissionError("denied")
+        return original_stat(path, *args, **kwargs)
 
-    class Readable:
-        name = "Held.xml"
-        path = str(tmp_path / name)
-        def is_dir(self):
-            return False
-        def is_file(self):
-            return True
-        def stat(self):
-            return SimpleNamespace(st_size=12)
-
-    class Entries:
-        def __enter__(self):
-            return iter([Unreadable(), Readable()])
-        def __exit__(self, *args):
-            pass
-
-    monkeypatch.setattr(browser.os, "scandir", lambda _: Entries())
+    monkeypatch.setattr(Path, "stat", stat_with_inaccessible_child)
     result = browser.list_hero_files(tmp_path)
-    assert result["files"] == [{"name": "Held.xml", "path": str(tmp_path / "Held.xml"), "size": 12}]
+    assert result["files"] == [{"name": "Held.xml", "path": str(tmp_path / "Held.xml"), "size": 13}]
 
 
-def test_root_has_no_parent_and_roots_are_absolute(tmp_path):
-    result = browser.list_hero_files(Path(tmp_path.anchor))
+def test_root_has_no_parent_and_roots_include_only_allowed_directories(tmp_path, monkeypatch):
+    core_input = tmp_path / "input"
+    library = tmp_path / "hero library"
+    core_input.mkdir()
+    library.mkdir()
+    (library / "adventurers").mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(core_input))
+    (tmp_path / "oneko_hero_document_paths.json").write_text(
+        json.dumps({"roots": [str(library)]}), encoding="utf-8",
+    )
+    result = browser.list_hero_files(library)
     assert result["parent"] is None
-    assert all(Path(item["path"]).is_absolute() for item in result["roots"])
-    assert any(item["path"] == tmp_path.anchor for item in result["roots"])
+    assert {Path(item["path"]) for item in result["roots"]} == {core_input.resolve(), library.resolve()}
+    assert browser.list_hero_files(library / "adventurers")["parent"] == str(library.resolve())
+
+
+def test_picker_rejects_parent_traversal_and_similarly_named_sibling(tmp_path, monkeypatch):
+    root = tmp_path / "heroes"
+    sibling = tmp_path / "heroes_other"
+    root.mkdir()
+    sibling.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    for candidate in (sibling, root / ".." / sibling.name):
+        with pytest.raises(browser.HeroBrowseError, match="freigegebenen Ordner") as error:
+            browser.list_hero_files(candidate)
+        assert error.value.status == 403
+
+
+def test_picker_hides_links_to_files_and_directories_outside_roots(tmp_path, monkeypatch):
+    root = tmp_path / "heroes"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (outside / "other.xml").write_text("<held/>", encoding="utf-8")
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    links = root / "other.xml", root / "outside directory"
+    try:
+        links[0].symlink_to(outside / "other.xml")
+        links[1].symlink_to(outside, target_is_directory=True)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"Symbolic links unavailable: {error}")
+    listing = browser.list_hero_files(root)
+    assert not listing["files"]
+    assert not listing["directories"]
+    for link in links:
+        with pytest.raises(browser.HeroBrowseError, match="freigegebenen Ordner") as error:
+            browser.list_hero_files(link)
+        assert error.value.status == 403
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows directory junctions")
+def test_windows_junction_cannot_escape_the_input_root(tmp_path, monkeypatch):
+    winapi = pytest.importorskip("_winapi")
+    root = tmp_path / "heroes"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (outside / "other.xml").write_text("<held/>", encoding="utf-8")
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    junction = root / "junction"
+    try:
+        winapi.CreateJunction(str(outside), str(junction))
+    except (AttributeError, OSError) as error:
+        pytest.skip(f"Windows junctions unavailable: {error}")
+
+    assert not browser.list_hero_files(root)["directories"]
+    with pytest.raises(browser.HeroBrowseError, match="freigegebenen Ordner") as error:
+        browser.list_hero_files(junction)
+    assert error.value.status == 403
+    with pytest.raises(ValueError, match="freigegebenen Ordner"):
+        document.load_hero_document(document_path=junction / "other.xml")
 
 
 @pytest.mark.parametrize("peer", [("127.0.0.1", 1234), ("::1", 1234, 0, 0), ("::ffff:127.0.0.1", 1234, 0, 0)])
@@ -114,6 +178,24 @@ def test_route_returns_listing_and_clear_json_errors_for_loopback_peers(tmp_path
     result = asyncio.run(browser.get_hero_files(request))
     assert result.status == 404
     assert "nicht gefunden" in json.loads(result.body)["error"]
+
+
+def test_route_rejects_paths_outside_the_roots_even_on_loopback(tmp_path, monkeypatch):
+    root = tmp_path / "input"
+    root.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+
+    def reject_scan(path):
+        pytest.fail(f"The route attempted to list a disallowed directory: {path}")
+
+    monkeypatch.setattr(browser.os, "scandir", reject_scan)
+    request = SimpleNamespace(
+        query={"path": str(tmp_path)},
+        transport=SimpleNamespace(get_extra_info={"peername": ("127.0.0.1", 1234)}.get),
+    )
+    result = asyncio.run(browser.get_hero_files(request))
+    assert result.status == 403
+    assert "freigegebenen Ordner" in json.loads(result.body)["error"]
 
 
 @pytest.mark.parametrize(

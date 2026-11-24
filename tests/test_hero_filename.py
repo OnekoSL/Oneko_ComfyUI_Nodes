@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
+import folder_paths
 import nodes as core_nodes
 from PIL import Image
 from comfy_extras.nodes_string import StringConcatenate
@@ -14,18 +15,24 @@ from Oneko_ComfyUI_Nodes.nodes import ollama_hero_portrait as portrait
 from Oneko_ComfyUI_Nodes.nodes.diffusion_clip_vae_cycler_loader import _filename_model_name
 
 
+@pytest.fixture(autouse=True)
+def core_input_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(tmp_path))
+    monkeypatch.setattr(folder_paths, "base_path", str(tmp_path))
+
+
 @pytest.fixture
 def collection_path(tmp_path):
     path = tmp_path / "Heldensammlung.xml"
     path.write_text(
-        '<helden><held name="Firuna Ehrwald"/><held name="Jäger Ährenfeld"/></helden>',
+        '<helden><held name="Lea Muster"/><held name="Jäger Ährenfeld"/></helden>',
         encoding="utf-8",
     )
     return path
 
 
 def test_selected_xml_hero_names_are_independent_of_collection_filename(collection_path):
-    for hero_name, expected in (("Firuna Ehrwald", "Firuna_Ehrwald"), ("Jäger Ährenfeld", "Jäger_Ährenfeld")):
+    for hero_name, expected in (("Lea Muster", "Lea_Muster"), ("Jäger Ährenfeld", "Jäger_Ährenfeld")):
         hero = document.load_hero_document(document_path=collection_path, hero_name=hero_name)
         assert document.hero_filename_name(hero, document_path=collection_path) == expected
 
@@ -34,12 +41,12 @@ def test_in_place_document_change_changes_filename_name(tmp_path):
     path = tmp_path / "currently_selected.xml"
     names = []
     fingerprints = []
-    for name in ("Alrik", "Firuna Ehrwald"):
+    for name in ("Alrik", "Lea Muster"):
         path.write_text(f'<held name="{name}"/>', encoding="utf-8")
         hero = document.load_hero_document(document_path=path)
         names.append(document.hero_filename_name(hero, document_path=path))
         fingerprints.append(document.hero_document_fingerprint(document_path=path, document_text=" \ufeff \n"))
-    assert names == ["Alrik", "Firuna_Ehrwald"]
+    assert names == ["Alrik", "Lea_Muster"]
     assert fingerprints[0] != fingerprints[1]
 
 
@@ -67,7 +74,7 @@ def test_inline_document_never_inherits_old_file_name(tmp_path, inline, expected
 
 @pytest.mark.parametrize("name,expected", [
     ("Jäger A\u0308hrenfeld", "Jäger_Ährenfeld"),
-    (" .._ Firuna  Ehrwald_ . ", "Firuna_Ehrwald"),
+    (" .._ Lea  Muster_ . ", "Lea_Muster"),
     ('Lord<>:"/\\|?*%\x00\x1f\x7f\x85Alrik', "Lord_Alrik"),
     ("Held\tmit\nLeerraum\u00a0hier", "Held_mit_Leerraum_hier"),
     ("CON", "_CON"),
@@ -107,7 +114,7 @@ def test_fifth_output_uses_selected_source_hero_not_ollama_name(collection_path)
 
     with patch.object(portrait, "_request_ollama", side_effect=fake_response) as request, \
          patch.object(portrait, "_unload_after_run"):
-        for hero_name, expected in (("Firuna Ehrwald", "Firuna_Ehrwald"), ("Jäger Ährenfeld", "Jäger_Ährenfeld")):
+        for hero_name, expected in (("Lea Muster", "Lea_Muster"), ("Jäger Ährenfeld", "Jäger_Ährenfeld")):
             result = portrait.OnekoOllamaHeroPortrait.execute(
                 document_path=collection_path, hero_name=hero_name,
                 output_language="Deutsch", ollama_model="translator-only:latest",
@@ -120,7 +127,7 @@ def test_fifth_output_uses_selected_source_hero_not_ollama_name(collection_path)
 
 @pytest.mark.parametrize("hero_name,expected_token", [
     ("Jäger %width% %batch_num%", "Jäger_width_batch_num"),
-    ("Raluf 'der Kühne'", "Raluf_'der_Kühne'"),
+    ("Nela 'die Kluge'", "Nela_'die_Kluge'"),
 ])
 def test_core_concatenate_and_save_image_keep_hero_model_names_and_counter(tmp_path, hero_name, expected_token):
     hero_token = document.hero_filename_name({"name": hero_name})

@@ -5,10 +5,18 @@ from unittest.mock import patch
 
 import pytest
 import execution
+import folder_paths
 import nodes as core_nodes
 from comfy_extras.nodes_preview_any import PreviewAny
 
 from Oneko_ComfyUI_Nodes.nodes import ollama_hero_portrait as portrait
+
+
+@pytest.fixture
+def core_input_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(tmp_path))
+    monkeypatch.setattr(folder_paths, "base_path", str(tmp_path))
+    return tmp_path
 
 
 HERO_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -360,13 +368,13 @@ def test_empty_or_nontext_fact_is_not_silently_dropped(invalid_translation, tran
     assert request.call_count == 2
 
 
-@pytest.mark.parametrize("output_language,age_text", [("Englisch", "21 years old"), ("Deutsch", "21 Jahre alt")])
-def test_apostrophe_path_and_numeric_facts_survive_model_omissions(tmp_path, output_language, age_text, transport):
+@pytest.mark.parametrize("output_language,age_text", [("Englisch", "34 years old"), ("Deutsch", "34 Jahre alt")])
+def test_apostrophe_path_and_numeric_facts_survive_model_omissions(core_input_root, output_language, age_text, transport):
     request, _ = transport
-    path = tmp_path / "5 Raluf 'der Kühne'.xml"
-    path.write_text('''<held name="Raluf 'der Kühne'"><basis>
+    path = core_input_root / "5 Nela 'die Kluge'.xml"
+    path.write_text('''<held name="Nela 'die Kluge'"><basis>
         <geschlecht name="männlich"/><rasse string="Thorwaler">
-        <aussehen alter="21"/><groesse value="208" gewicht="113"/>
+        <aussehen alter="34"/><groesse value="182" gewicht="91"/>
         </rasse></basis></held>''', encoding="utf-8")
 
     def reply(*args, **kwargs):
@@ -379,13 +387,13 @@ def test_apostrophe_path_and_numeric_facts_survive_model_omissions(tmp_path, out
         prompt_detail="Kompakt", document_path=str(path), output_language=output_language,
     ).result
     assert age_text in positive
-    assert "208" in positive and "113" in positive
+    assert "182" in positive and "91" in positive
     assert "An adult" not in positive and "A tall man" not in positive
-    assert json.loads(summary)["name"] == "Raluf 'der Kühne'"
-    assert filename == "Raluf_'der_Kühne'"
+    assert json.loads(summary)["name"] == "Nela 'die Kluge'"
+    assert filename == "Nela_'die_Kluge'"
     assert request.call_count == 1
     payload = request_payload(request.call_args.args[2])
-    assert "21" not in payload["source_fields"]["identity"]
+    assert "34" not in payload["source_fields"]["identity"]
     assert payload["canonical_translations"]["age"] == age_text
 
 
@@ -621,15 +629,27 @@ def test_invalid_hero_does_not_call_ollama(document_text, transport):
     request.assert_not_called()
 
 
-def test_missing_hero_file_does_not_call_ollama(tmp_path, transport):
+def test_missing_hero_file_does_not_call_ollama(core_input_root, transport):
     request, _ = transport
     with pytest.raises(ValueError):
-        portrait.OnekoOllamaHeroPortrait.execute(prompt_detail="Kompakt", document_path=str(tmp_path / "missing.xml"))
+        portrait.OnekoOllamaHeroPortrait.execute(prompt_detail="Kompakt", document_path=str(core_input_root / "missing.xml"))
     request.assert_not_called()
 
 
-def test_fingerprint_tracks_file_contents_even_without_size_or_timestamp_change(tmp_path):
-    path = tmp_path / "hero.xml"
+def test_outside_hero_file_does_not_call_ollama(core_input_root, transport, monkeypatch):
+    request, _ = transport
+    approved = core_input_root / "input"
+    approved.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(approved))
+    outside = core_input_root / "unrelated.xml"
+    outside.write_text(HERO_XML, encoding="utf-8")
+    with pytest.raises(ValueError, match="freigegebenen Ordner"):
+        portrait.OnekoOllamaHeroPortrait.execute(prompt_detail="Kompakt", document_path=str(outside))
+    request.assert_not_called()
+
+
+def test_fingerprint_tracks_file_contents_even_without_size_or_timestamp_change(core_input_root):
+    path = core_input_root / "hero.xml"
     path.write_text(HERO_XML, encoding="utf-8")
     before_stat = path.stat()
     arguments = dict(document_path=str(path), seed=42, framing="Nur Kopf")

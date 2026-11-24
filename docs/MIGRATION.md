@@ -1,5 +1,9 @@
 # Migration zu Oneko
 
+## Heldenporträt: freigegebene Dateiordner
+
+Gespeicherte `document_path`-Werte funktionieren weiter, wenn die Datei im ComfyUI-Eingabeordner oder einem zusätzlich freigegebenen Ordner liegt. Für bestehende Workflows mit anderen Pfaden kannst du den Ordner als Administrator in `oneko_hero_document_paths.json` freigeben. Die Datei liegt im ComfyUI-Basisverzeichnis. Änderungen an ihr greifen bei der nächsten Pfadprüfung. Alternativ die Datei in den Eingabeordner legen und den Pfad im Workflow anpassen oder ihren Inhalt über `document_text` eingeben. Auch ein per Verknüpfung erreichbares Ziel muss in einem freigegebenen Ordner liegen. [Konfigurationsbeispiel](../examples/README.md#ordner-für-heldendateien-freigeben)
+
 ## Heldenporträt: verlässliche Zahlenangaben
 
 Numerische Altersangaben werden als eigener fester Textbaustein aus dem Dokument übernommen; numerische Größe und Gewicht werden ebenfalls lokal formuliert. Damit kann eine ausgelassene oder ausgeschriebene Modellübersetzung dieser Werte keinen Serienabbruch mehr verursachen. Explizite Altersänderungen über Zusatzvorgaben bleiben möglich. Unstrukturierte Angaben werden weiterhin übersetzt und geprüft. Eingänge, Ausgänge und gespeicherte Widgetpositionen bleiben gleich; der Cache-Stand wird erhöht. Die Python-Korrektur benötigt einen ComfyUI-Neustart nach Abschluss laufender Aufträge.

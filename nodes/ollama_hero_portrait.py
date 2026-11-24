@@ -292,7 +292,7 @@ class OnekoOllamaHeroPortrait(io.ComfyNode):
             category="Oneko/02 Text/Ollama",
             description="Erzeugt mit Ollama Porträt-Prompts aus einem Heldendokument (Helden-XML oder Text), Pose und Hintergrund.",
             inputs=[
-                text("document_path", "Heldendatei", "Pfad zu einer .xml- oder .txt-Datei auf dem ComfyUI-Rechner. Leer lassen, wenn Heldentext verwendet wird.", False, optional=True),
+                text("document_path", "Heldendatei", "Pfad zu einer .xml- oder .txt-Datei in einem freigegebenen Ordner auf dem ComfyUI-Rechner. Leer lassen, wenn Heldentext verwendet wird.", False, optional=True),
                 text("document_text", "Heldentext / XML", "Optional: XML oder Charakterbeschreibung direkt einfügen bzw. als STRING verbinden. Nichtleerer Text hat Vorrang vor der Datei.", optional=True),
                 text("hero_name", "Heldenname in Sammeldatei", "Nur bei XML mit mehreren Helden erforderlich: exakter Name des gewünschten Helden.", False, advanced=True, optional=True),
                 text("pose", "Pose", "Körperhaltung, Geste und Blickrichtung. Die Auswahl Bildausschnitt bestimmt, was davon sichtbar ist."),
@@ -423,7 +423,7 @@ class OnekoOllamaHeroPortrait(io.ComfyNode):
 
     @classmethod
     def fingerprint_inputs(cls, **kwargs):
-        payload = {"revision": 7, "inputs": kwargs, "document": hero_document_fingerprint(**kwargs)}
+        payload = {"revision": 8, "inputs": kwargs, "document": hero_document_fingerprint(**kwargs)}
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 

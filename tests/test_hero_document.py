@@ -1,8 +1,17 @@
+import json
 import os
+from pathlib import Path
 
 import pytest
+import folder_paths
 
 from Oneko_ComfyUI_Nodes.nodes import hero_document as document
+
+
+@pytest.fixture(autouse=True)
+def core_input_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(tmp_path))
+    monkeypatch.setattr(folder_paths, "base_path", str(tmp_path))
 
 
 HERO = '''<held name="Testheld"><basis>
@@ -74,6 +83,89 @@ def test_pasted_text_overrides_invalid_path_and_empty_text_uses_file(tmp_path):
     assert document.load_hero_document(document_path=path, document_text=" \n")["name"] == "Elf"
     with pytest.raises(ValueError, match="document_path"):
         document.load_hero_document(document_text=str(path))
+
+
+def test_explicit_extra_root_allows_documents_outside_core_input(tmp_path, monkeypatch):
+    core_input = tmp_path / "input"
+    library = tmp_path / "hero library"
+    core_input.mkdir()
+    library.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(core_input))
+    (tmp_path / "oneko_hero_document_paths.json").write_text(
+        json.dumps({"roots": [str(library)]}), encoding="utf-8",
+    )
+    path = library / "Held.TXT"
+    path.write_text("Eine Beispielheldin.", encoding="utf-8")
+    assert document.load_hero_document(document_path=path)["description"] == "Eine Beispielheldin."
+
+
+@pytest.mark.parametrize("configuration", [None, "incomplete json {", '{"roots": "invalid"}', '{"roots": ["outside"]}'])
+def test_missing_or_invalid_config_keeps_core_input_without_allowing_other_roots(tmp_path, monkeypatch, configuration):
+    root = tmp_path / "input"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    if configuration is not None:
+        (tmp_path / "oneko_hero_document_paths.json").write_text(configuration, encoding="utf-8")
+    approved_file = root / "approved.txt"
+    approved_file.write_text("Approved test document.", encoding="utf-8")
+    external_file = outside / "external.txt"
+    external_file.write_text("Unrelated test document.", encoding="utf-8")
+    assert document.load_hero_document(document_path=approved_file)["description"] == "Approved test document."
+    with pytest.raises(ValueError, match="freigegebenen Ordner"):
+        document.load_hero_document(document_path=external_file)
+
+
+def test_sibling_prefix_and_parent_traversal_are_outside_root(tmp_path, monkeypatch):
+    root = tmp_path / "heroes"
+    outside = tmp_path / "heroes_private"
+    root.mkdir()
+    outside.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    path = outside / "example.txt"
+    path.write_text("Unrelated test text.", encoding="utf-8")
+    for candidate in (path, root / ".." / outside.name / path.name):
+        with pytest.raises(ValueError, match="freigegebenen Ordner"):
+            document.load_hero_document(document_path=candidate)
+        assert document.load_hero_document(document_path=candidate, document_text="Inline text.")["description"] == "Inline text."
+
+
+def test_file_link_cannot_escape_the_input_root(tmp_path, monkeypatch):
+    root = tmp_path / "heroes"
+    root.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    outside = tmp_path / "outside.txt"
+    outside.write_text("Unrelated test text.", encoding="utf-8")
+    link = root / "linked.txt"
+    try:
+        link.symlink_to(outside)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"Symbolic links unavailable: {error}")
+    with pytest.raises(ValueError, match="freigegebenen Ordner"):
+        document.load_hero_document(document_path=link)
+
+
+def test_fingerprint_does_not_open_files_outside_the_roots(tmp_path, monkeypatch):
+    root = tmp_path / "input"
+    root.mkdir()
+    monkeypatch.setattr(folder_paths, "get_input_directory", lambda: str(root))
+    outside = tmp_path / "other.txt"
+    outside.write_text("Unrelated test text.", encoding="utf-8")
+    original_open = Path.open
+
+    def track_open(path, *args, **kwargs):
+        assert path != outside, "Fingerprint opened a document outside authorized roots"
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", track_open)
+    before = document.hero_document_fingerprint(document_path=outside)
+    with original_open(outside, "w", encoding="utf-8") as stream:
+        stream.write("Different unrelated test text.")
+    assert document.hero_document_fingerprint(document_path=outside) == before
+    assert document.hero_document_fingerprint(document_path=outside, document_text="Inline") == (
+        document.hero_document_fingerprint(document_text="Inline")
+    )
 
 
 @pytest.mark.parametrize("source", ["<held>", "<document/>", "<helden/>"])

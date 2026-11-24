@@ -124,7 +124,7 @@ export function openHeroFileDialog(node, api) {
     layout.append(element("h2", "Heldendatei auswählen", { id: `oneko-hero-title-${dialogNumber}` }));
     layout.append(element("p", "Ordner öffnen, nach Dateinamen suchen und XML- oder TXT-Datei per Doppelklick auswählen. Die Originaldatei bleibt an ihrem Speicherort."));
     const navigation = element("form", null, { class: "hero-row" });
-    const roots = element("select", null, { "aria-label": "Laufwerk oder Startordner" });
+    const roots = element("select", null, { "aria-label": "Freigegebener Startordner" });
     roots.append(element("option", "Startordner", { value: "" }));
     const up = element("button", "↑", { type: "button", title: "Übergeordneter Ordner", "aria-label": "Übergeordneter Ordner" });
     const address = element("input", null, { type: "text", "aria-label": "Ordnerpfad", placeholder: "Ordnerpfad", autocomplete: "off" });
@@ -224,9 +224,10 @@ export function openHeroFileDialog(node, api) {
             listing = result;
             address.value = result.directory;
             roots.replaceChildren(...result.roots.map((root) => element("option", root.name, { value: root.path })));
-            const matching = [...result.roots].sort((a, b) => b.path.length - a.path.length).find(
-                (root) => result.directory.toLocaleLowerCase().startsWith(root.path.toLocaleLowerCase()),
-            );
+            const matching = [...result.roots].sort((a, b) => b.path.length - a.path.length).find(({ path }) => {
+                const separator = path.includes("\\") ? "\\" : "/";
+                return result.directory === path || result.directory.startsWith(path.endsWith(separator) ? path : path + separator);
+            });
             roots.value = matching?.path || "";
             up.disabled = !result.parent;
             search.value = "";
@@ -258,7 +259,7 @@ export function openHeroFileDialog(node, api) {
     address.value = String(widget(node, "document_path")?.value || "");
     const initialPath = address.value;
     navigate(initialPath).then(async (ok) => {
-        // A removed old file should not strand the user without drive navigation.
+        // A removed or no longer approved file should not block folder navigation.
         if (!ok && !closed && requestNumber === 1 && initialPath.trim()) {
             ok = await navigate("");
             if (ok && !closed) message("Der bisherige Pfad ist nicht verfügbar. Bitte einen Ordner auswählen.");

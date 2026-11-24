@@ -87,7 +87,7 @@ Die Stilvorgabe steht am Promptanfang und verwendet dieselbe Definition im Ollam
 
 Der integrierte **Datei-Cycler** bietet dieselben Frontend-Modi wie der Modell-Cycler, einschließlich `increment-wrap`, Dateifilter und **Aufträge pro Datei**. Er arbeitet mit XML-/TXT-Originaldateien im ausgewählten Ordner. `fixed` ist der kompatible Standard. Die Dateiliste wird vorab geladen; jeder erfolgreich eingereihte Auftrag zählt einzeln. Der Wiederholungswert ermöglicht mehrere Modelle pro Held. Bestehende Eingänge, Ausgänge und gespeicherte Widgetpositionen bleiben erhalten; die zusätzlichen UI-Einstellungen werden als Node-Eigenschaften gespeichert. [Bedienung](../examples/README.md#ollama-hero-portrait).
 
-**Heldendatei auswählen …** ergänzt einen Dialog mit Laufwerks- und Ordnernavigation sowie Dateinamenfilter. Er öffnet den bisherigen Dateiordner und übernimmt den Originalpfad ohne Kopie; alter eingefügter Text wird beim Dateiwechsel geleert. Bestehende Workflow-Eingänge und ihre gespeicherten Positionen bleiben erhalten.
+**Heldendatei auswählen …** öffnet auf demselben Rechner einen Dialog für freigegebene Ordner. `document_path` und der Datei-Cycler verwenden ComfyUIs Eingabeordner sowie zusätzliche Ordner aus `oneko_hero_document_paths.json` im ComfyUI-Basisverzeichnis. Der Dialog übernimmt den Originalpfad und leert eingefügten Text beim Dateiwechsel. [Ordner freigeben](../examples/README.md#ordner-für-heldendateien-freigeben)
 
 ## Oneko/02 Text/Vocabulary
 

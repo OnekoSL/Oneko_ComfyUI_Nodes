@@ -321,8 +321,8 @@ test("cancel closes the dialog and aborts pending navigation without changing th
     });
 });
 
-for (const status of [400, 404]) {
-    test(`an unavailable initial path (${status}) falls back once to drive navigation without changing the document`, async () => {
+for (const status of [400, 403, 404]) {
+    test(`an unavailable initial path (${status}) falls back once to approved folders without changing the document`, async () => {
         await withDialog(async ({ api, requests, respond }) => {
             const { node, events } = makeNode();
             const before = state(node);
@@ -332,7 +332,7 @@ for (const status of [400, 404]) {
             assert.equal(requests[1].url, "/oneko/hero/files?path=");
             await respond(1, folderListing("J:\\ComfyUI\\input"));
             const address = findElement(dialog, (entry) => entry.attributes["aria-label"] === "Ordnerpfad");
-            const roots = findElement(dialog, (entry) => entry.attributes["aria-label"] === "Laufwerk oder Startordner");
+            const roots = findElement(dialog, (entry) => entry.attributes["aria-label"] === "Freigegebener Startordner");
             const statusElement = findElement(dialog, (entry) => entry.attributes.role === "status");
             assert.equal(address.value, "J:\\ComfyUI\\input");
             assert.equal(roots.children[0].attributes.value, "J:\\");

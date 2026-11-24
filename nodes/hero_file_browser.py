@@ -7,7 +7,15 @@ from pathlib import Path
 import re
 import stat
 
-import folder_paths
+from .hero_document import (
+    HERO_EXTENSIONS,
+    HeroPathOutsideRoots,
+    hero_document_roots,
+    hero_path_text,
+    in_resolved_hero_roots,
+    parse_hero_path,
+    resolve_hero_path,
+)
 
 try:
     from aiohttp import web
@@ -15,9 +23,6 @@ try:
 except ImportError:
     web = None
     PromptServer = None
-
-
-HERO_EXTENSIONS = frozenset((".xml", ".txt"))
 
 
 class HeroBrowseError(ValueError):
@@ -39,38 +44,17 @@ def _sort_name(entry):
                  for part in re.split(r"(\d+)", entry["name"]))
 
 
-def _roots(directory):
-    """List drive names without probing removable or disconnected drive contents."""
-    paths = []
-    if os.name == "nt":
-        import ctypes
-        try:
-            mask = ctypes.windll.kernel32.GetLogicalDrives()
-            paths = [f"{chr(65 + index)}:\\" for index in range(26) if mask & (1 << index)]
-        except (AttributeError, OSError):
-            pass
-    else:
-        paths = [str(Path("/")), str(Path.home())]
-    # An explicitly browsed UNC share may not appear in Windows' drive mask.
-    if directory.anchor and directory.anchor not in paths:
-        paths.append(directory.anchor)
-    return [{"name": value, "path": value} for value in dict.fromkeys(paths)]
-
-
 def list_hero_files(path="", input_directory=None):
-    """List folders and XML/TXT files without opening, copying or modifying them."""
-    value = str(path or "").strip()
-    if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
-        value = value[1:-1]
-    if not value:
-        value = str(input_directory if input_directory is not None else folder_paths.get_input_directory())
-    if "\0" in value or re.match(r"^[a-z][a-z0-9+.-]*://", value, re.I):
-        raise HeroBrowseError("Bitte einen lokalen Ordnerpfad statt einer URL angeben.")
+    """List approved folders and XML/TXT files without opening the files."""
+    roots = hero_document_roots(input_directory)
+    if not roots:
+        raise HeroBrowseError("Für Heldendokumente ist kein freigegebener Ordner verfügbar.", 404)
+    value = hero_path_text(path)
     try:
-        candidate = Path(value).expanduser()
+        candidate = parse_hero_path(value) if value else next(iter(roots.values()))
         if not candidate.is_absolute():
-            raise HeroBrowseError("Bitte einen vollständigen Ordnerpfad angeben, zum Beispiel J:\\Helden.")
-        candidate = candidate.resolve(strict=True)
+            raise HeroBrowseError("Bitte einen vollständigen Pfad zu einem freigegebenen Ordner angeben.")
+        candidate = resolve_hero_path(candidate, roots)
         mode = candidate.stat().st_mode
         selected = None
         if stat.S_ISREG(mode):
@@ -87,24 +71,31 @@ def list_hero_files(path="", input_directory=None):
         with os.scandir(directory) as entries:
             for entry in entries:
                 try:
-                    if entry.is_dir():
+                    child = resolve_hero_path(Path(entry.path), roots)
+                    entry_stat = child.stat()
+                    if stat.S_ISDIR(entry_stat.st_mode):
                         directories.append({"name": entry.name, "path": entry.path})
-                    elif Path(entry.name).suffix.casefold() in HERO_EXTENSIONS and entry.is_file():
-                        files.append({"name": entry.name, "path": entry.path, "size": entry.stat().st_size})
-                except OSError:
-                    # A vanished or inaccessible child must not hide its readable siblings.
+                    elif (stat.S_ISREG(entry_stat.st_mode) and Path(entry.name).suffix.casefold() in HERO_EXTENSIONS
+                          and child.suffix.casefold() in HERO_EXTENSIONS):
+                        files.append({"name": entry.name, "path": entry.path, "size": entry_stat.st_size})
+                except (OSError, RuntimeError, ValueError):
+                    # Unavailable or excluded children do not hide readable siblings.
                     continue
     except HeroBrowseError:
         raise
+    except HeroPathOutsideRoots as error:
+        raise HeroBrowseError(str(error), 403) from error
     except (OSError, RuntimeError) as error:
         raise _filesystem_error(error) from error
     except ValueError as error:
-        raise HeroBrowseError("Der Ordnerpfad ist ungültig.") from error
+        raise HeroBrowseError(str(error)) from error
 
+    parent = directory.parent
+    approved = dict.fromkeys(roots.values())
     return {
         "directory": str(directory),
-        "parent": str(directory.parent) if directory.parent != directory else None,
-        "roots": _roots(directory),
+        "parent": str(parent) if parent != directory and in_resolved_hero_roots(parent, approved) else None,
+        "roots": [{"name": str(root), "path": str(root)} for root in approved],
         "directories": sorted(directories, key=_sort_name),
         "files": sorted(files, key=_sort_name),
         "selected": selected,

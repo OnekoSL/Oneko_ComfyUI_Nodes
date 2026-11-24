@@ -1,13 +1,21 @@
 """Read portrait-relevant reference data from Helden Software XML or plain text."""
 
 import hashlib
+import json
+import logging
+import os
 from pathlib import Path
 import re
+import stat
 import unicodedata
 import xml.etree.ElementTree as ET
 
+import folder_paths
+
 
 MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
+HERO_EXTENSIONS = frozenset((".xml", ".txt"))
+HERO_ROOTS_CONFIG = "oneko_hero_document_paths.json"
 _VISIBLE_TRAITS = (
     "aussehen", "albino", "fell", "schuppen", "haut", "kiemen", "flügel",
     "hörner", "schwanz", "gliedmaß", "krallen", "hauer", "wuchs", "narben",
@@ -54,23 +62,104 @@ def _unique(values):
     return list(dict.fromkeys(value for value in values if value))
 
 
-def _read_file(document_path):
-    value = str(document_path or "").strip()
+class HeroPathOutsideRoots(ValueError):
+    def __init__(self):
+        super().__init__("Der Pfad liegt außerhalb der freigegebenen Ordner für Heldendokumente.")
+
+
+def hero_document_roots(input_directory=None):
+    """Return the configured and resolved forms of existing, trusted roots."""
+    if input_directory is None:
+        input_directory = folder_paths.get_input_directory()
+    config = Path(folder_paths.base_path) / HERO_ROOTS_CONFIG
+    configured = []
+    try:
+        settings = json.loads(config.read_text(encoding="utf-8-sig"))
+        if not isinstance(settings, dict) or not isinstance(settings.get("roots"), list):
+            raise ValueError("The configuration must contain a roots array.")
+        configured = [path for path in settings["roots"] if isinstance(path, str) and Path(path).is_absolute()]
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError):
+        logging.warning("Oneko Hero Portrait: %s could not be read. Only ComfyUI input is approved.", config.name)
+    roots = {}
+    for directory in (input_directory, *configured):
+        try:
+            root = Path(os.path.abspath(directory))
+            resolved = root.resolve(strict=True)
+            if resolved.is_dir():
+                roots[root] = resolved
+        except (OSError, RuntimeError, ValueError):
+            continue
+    return roots
+
+
+def hero_path_text(value):
+    value = str(value or "").strip()
     if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
         value = value[1:-1]
+    return value
+
+
+def parse_hero_path(value):
+    if "\0" in value or re.match(r"^[a-z][a-z0-9+.-]*://", value, re.I):
+        raise ValueError("Bitte einen Dateisystempfad statt einer URL angeben.")
+    try:
+        path = Path(value).expanduser()
+    except RuntimeError as error:
+        raise ValueError("Der Dateisystempfad ist ungültig.") from error
+    if os.name == "nt" and (
+        path.drive.startswith(("\\\\?\\", "\\\\.\\"))
+        or (path.anchor and not path.is_absolute())
+        or any(":" in part for part in path.parts[bool(path.anchor):])
+        or path.is_reserved()
+    ):
+        raise ValueError("Der Windows-Dateisystempfad ist ungültig.")
+    return path
+
+
+def resolve_hero_path(path, roots):
+    """Check the requested location, then check the real target before use."""
+    lexical = Path(os.path.abspath(path))
+    if not any(lexical.is_relative_to(root) for root in (*roots, *roots.values())):
+        raise HeroPathOutsideRoots()
+    resolved = path.resolve(strict=True)
+    if not in_resolved_hero_roots(resolved, roots.values()):
+        raise HeroPathOutsideRoots()
+    return resolved
+
+
+def in_resolved_hero_roots(path, roots):
+    # Resolved spelling also preserves the boundary on case-sensitive NTFS directories.
+    return any(path.parts[:len(root.parts)] == root.parts for root in roots)
+
+
+def _read_file(document_path):
+    value = hero_path_text(document_path)
     if not value:
         raise ValueError("Bitte einen Helden-Dateipfad oder Heldentext angeben.")
-    path = Path(value).expanduser()
-    if path.suffix.lower() not in (".xml", ".txt"):
+    path = parse_hero_path(value)
+    if path.suffix.lower() not in HERO_EXTENSIONS:
         raise ValueError("Heldendokumente müssen eine .xml- oder .txt-Datei sein.")
+    input_directory = Path(folder_paths.get_input_directory())
+    roots = hero_document_roots(input_directory)
+    if not path.is_absolute():
+        # Preserve existing paths relative to the working directory when they
+        # already point into an approved folder. Otherwise use ComfyUI input.
+        from_working_directory = Path(os.path.abspath(path))
+        if not any(from_working_directory.is_relative_to(root) for root in (*roots, *roots.values())):
+            path = input_directory / path
     try:
-        with path.open("rb") as source:
+        resolved = resolve_hero_path(path, roots)
+        if resolved.suffix.lower() not in HERO_EXTENSIONS or not stat.S_ISREG(resolved.stat().st_mode):
+            raise ValueError("Heldendokumente müssen reguläre .xml- oder .txt-Dateien sein.")
+        with resolved.open("rb") as source:
             data = source.read(MAX_DOCUMENT_BYTES + 1)
-    except OSError as error:
-        raise ValueError(f"Heldendokument kann nicht gelesen werden: {path} ({error.strerror or error})") from error
+    except (OSError, RuntimeError) as error:
+        raise ValueError("Heldendokument kann nicht gelesen werden.") from error
     if len(data) > MAX_DOCUMENT_BYTES:
         raise ValueError("Das Heldendokument ist größer als 4 MiB.")
-    return data, path.suffix.lower()
+    return data, resolved.suffix.lower()
 
 
 def _decode_text(data):
@@ -190,10 +279,7 @@ def hero_filename_name(hero, document_path="", document_text=""):
     name = str(hero.get("name") or "").strip()
     inline_text = str(document_text or "").strip().lstrip("\ufeff").strip()
     if not name and not inline_text:
-        value = str(document_path or "").strip()
-        if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        name = Path(value).stem
+        name = Path(hero_path_text(document_path)).stem
     # Percent signs must not reach SaveImage's %width% / %batch_num% expansion.
     name = unicodedata.normalize("NFC", name)
     name = re.sub(r'[<>:"/\\|?*%\x00-\x1f\x7f-\x9f\s]+', "_", name)

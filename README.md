@@ -57,7 +57,7 @@ Danach ComfyUI neu starten. Die Nodes erscheinen unter `Oneko/01 Loaders` bis `O
 
 ## Voraussetzungen je Funktion
 
-- **Basis:** eine aktuelle kompatible ComfyUI-Installation mit ihren eigenen Torch-, Torchaudio-, NumPy- und Pillow-Abhängigkeiten. Die modularen Audio-Nodes verwenden die V3-/Autogrow-API; die aktuelle CPU-/Importprüfung besteht mit ComfyUI **0.45.0** und Python **3.12.10**. MOSS-Funktionen benötigen einen Core-Stand mit MOSS-Unterstützung; Umfang und frühere Browser-/Modellabnahmen stehen im [Validierungsprotokoll](docs/VALIDIERUNG.md).
+- **Basis:** eine aktuelle kompatible ComfyUI-Installation mit ihren eigenen Torch-, Torchaudio-, NumPy- und Pillow-Abhängigkeiten. Die modularen Audio-Nodes verwenden die V3-/Autogrow-API. Der aktuelle Quellstand wurde auf CPU mit ComfyUI **0.46.0** und Python **3.12.10** geprüft. MOSS-Funktionen benötigen einen Core-Stand mit MOSS-Unterstützung; Umfang und frühere Browser-/Modellabnahmen stehen im [Validierungsprotokoll](docs/VALIDIERUNG.md).
 - **Ollama:** ein erreichbarer Ollama-Dienst und selbst gewählte installierte Text-/Vision-Modelle. Default-URL: `http://127.0.0.1:11434`. Das Paket lädt keine Modelle automatisch herunter. Modelllisten werden über `/oneko/ollama/models` bereitgestellt.
 - **HiResFix Tiled:** benötigt das aktive Originalpaket `ComfyUI_UltimateSDUpscale` mit `UltimateSDUpscaleNoUpscale`. Der H3-Fork ist dafür nicht erforderlich.
 - **Wan-Video:** passende Wan-2.2-TI2V-5B-Modelle und VAE. Segmentzusammenbau benötigt die in `requirements.txt` deklarierten Pakete `imageio` und `imageio-ffmpeg` mit einem unterstützten Codec.
