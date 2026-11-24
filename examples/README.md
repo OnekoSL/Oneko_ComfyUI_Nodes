@@ -86,7 +86,7 @@ Die ausgegebenen Masken entsprechen den gewählten Rechtecken: Lücken werden ni
 
 ## MOSS: DiT Block Noise
 
-[MOSS-Beispiel mit SLG](oneko_moss_dit_block_noise.json): Modell → **DiT Block Noise (MOSS) (Oneko)** → SLG → Sampler. SLG und Noise können auch in umgekehrter Reihenfolge verbunden werden. Die bisherige UNet-Node wird dafür nicht verwendet.
+Im [MOSS-Beispiel mit SLG](oneko_moss_dit_block_noise.json) führt die Modellverbindung über **DiT Block Noise (Oneko)** und SLG zum Sampler. SLG und Noise können auch in umgekehrter Reihenfolge verbunden werden.
 
 | Regler | Bedeutung |
 |---|---|
@@ -102,11 +102,13 @@ Noise wird nach dem ursprünglichen Block berechnet und ausschließlich den erst
 
 Bestehende Block-Replacements bleiben aktiv. Rufen sie den Originalblock auf, wird dessen Ergebnis bearbeitet; überspringen oder ersetzen sie ihn vollständig (z. B. SLG), entfällt dort auch Noise. Mehrere Noise-Nodes lassen sich kombinieren; ihre Reihenfolge beeinflusst das Ergebnis. Neue Nodes sind neutral. Räumlich hochskalierende Profile wie `highres_pyramid` benötigen bei den großen DiT-Features mehr Speicher als Gaussian.
 
-Experimentell und zunächst nur für die echte MOSS-Architektur. Die CPU-Prüfung deckt Tokenbereiche, native Wrapper-/SLG-Verarbeitung und Seed-Verhalten ab; die Bildwirkung mit vollständigen Gewichten muss separat verglichen werden.
+### AuraFlow und Pony V7
+
+Verbinde den `MODEL`-Ausgang von **DiT Block Noise (Oneko)** mit CFG Guider und BasicScheduler. Bei Pony V7 stehen `0-3` für die Doppelblöcke und `4-35` für die Einzelblöcke. `15-30` wählt damit die Einzelblöcke mit internen Indizes `11-26`. Das Bildraster ergibt sich aus der zur Patchgröße aufgerundeten Latentgröße. In den Einzelblöcken erhält der Bildteil am Ende der gemeinsamen Sequenz das Noise.
 
 ## UNet Block Noise: Modellgrenze
 
-[Beispiel 06](oneko_example_06_controlled_noise_stages_unet_patch.json) benötigt ein Core-UNet-Modell, etwa SD1/SD2/SDXL. Die Node prüft das tatsächliche Diffusionsmodell. MOSS und andere DiT-Modelle werden mit einer verständlichen Fehlermeldung abgewiesen, auch bei Stärke 0; für diese Modelle die Node umgehen. Für MOSS gibt es jetzt die separate Node **DiT Block Noise (MOSS) (Oneko)**; andere DiT-Architekturen sind dort noch nicht unterstützt.
+[Beispiel 06](oneko_example_06_controlled_noise_stages_unet_patch.json) benötigt ein Core-UNet-Modell, etwa SD 1.x, SD 2.x oder SDXL. Für Anima, MOSS-Image und AuraFlow (Pony V7) gibt es **DiT Block Noise (Oneko)**. [Zuordnung nach Modellarchitektur](../README.md#block-noise-nach-modellarchitektur)
 
 ## MOSS: Loader und Pixel Anchored Remaster
 

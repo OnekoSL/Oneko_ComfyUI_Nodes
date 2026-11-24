@@ -1,6 +1,6 @@
 # Oneko ComfyUI Nodes
 
-Eine kuratierte Sammlung von **45 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.1** behebt die globalen USDU-/Preview-Eingriffe und stellt die Node-Anzahl klar. Enthalten sind weiterhin der modulare Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung einschließlich experimentellem DiT Block Noise. [Änderungen in 0.2.1](CHANGELOG.md#021--2026-11-15).
+Eine kuratierte Sammlung von **45 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.1** behebt die globalen USDU-/Preview-Eingriffe und stellt die Node-Anzahl klar. Enthalten sind weiterhin der modulare Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung. Experimentelles DiT Block Noise ist für Anima, AuraFlow und MOSS-Image verfügbar. [Änderungen in 0.2.1](CHANGELOG.md#021--2026-11-15).
 
 Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung. Registrierung, Anzeigenamen, Menüs, Frontend-Erweiterungen und Ollama-Route verwenden Oneko. Das Paket enthält seine Implementierungen selbst und importiert das alte Nukun-Paket nicht.
 
@@ -16,11 +16,26 @@ Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung.
 | Bilder und Upscaling | 3 | Rekursiver Loader, USDU HiResFix, Pixel Anchored Remaster |
 | Wan 2.2 Video | 9 | Einstellungen, TI2V-Latent, Fortsetzung, Manifeste, Segmente und Zusammenbau |
 | Audio | 6 | Ollama Verse Maker, ACE Song Director, Timeline Conditioning, Fünfspur-Mixer und modularer Mixer mit gebündelten Spuren und eingebauten Masterreglern |
-| Model Patch / Hilfsmittel | 3 | UNet Block Noise Patch, MOSS DiT Block Noise, Integer-/String-Zähler |
+| Model Patch / Hilfsmittel | 3 | UNet Block Noise Patch, DiT Block Noise, Integer-/String-Zähler |
 
 Der Ollama Prompt Refiner unterstützt nun zusätzlich `moss_image`: natürliche Beschreibungen ohne festes Wortbudget, räumliche Vorgaben und geschützte Bildbeschriftungen. [MOSS-Textvorlage](examples/oneko_moss_prompt_refiner.json) · [Bedienung und Fallback-Grenzen](examples/README.md#moss-ollama-prompt-refiner).
 
 [Vollständiger Node-Katalog](docs/NODE_KATALOG.md) · [Auswahl und Ausschlüsse](docs/AUSWAHL.md) · [Migration](docs/MIGRATION.md) · [Roadmap](ROADMAP.md)
+
+## Block Noise nach Modellarchitektur
+
+| Modellfamilie und Beispiele | Architektur in ComfyUI | Oneko-Node |
+|---|---|---|
+| Stable Diffusion 1.x und 2.x, etwa SD 1.5 und SD 2.1 | Core-U-Net (`UNetModel`) | **UNet Block Noise Patch (Oneko)** |
+| SDXL Base und Refiner sowie SDXL-Finetunes wie Pony Diffusion V6 XL, Illustrious XL und NoobAI-XL | Core-U-Net (`UNetModel`) | **UNet Block Noise Patch (Oneko)** |
+| Anima und Anima-Finetunes wie AnimaBreeze | Cosmos Predict2 DiT | **DiT Block Noise (Oneko)** |
+| AuraFlow und darauf basierende Modelle wie Pony V7 | AuraFlow DiT | **DiT Block Noise (Oneko)** |
+| MOSS-Image, etwa Base und SFT | MOSS-Image DiT | **DiT Block Noise (Oneko)** |
+| SD3/3.5, FLUX.1/2/3, Krea 2, Qwen-Image, Z-Image und Wan 2.x | Weitere Diffusion Transformer | Erfordern eigene Block-Noise-Patches |
+
+Maßgeblich ist die Architektur des geladenen `MODEL`. Auch Anima kann über **Load Diffusion Model** aus `models/unet` geladen werden und verwendet **DiT Block Noise**. [UNet-Architekturprüfung](nodes/unet_block_noise_patch.py) · [DiT-Architekturprüfung](nodes/dit_block_noise_patch.py)
+
+Verbinde den Ausgang des passenden Patch-Nodes mit dem `model`-Eingang des Samplers. Bei einem Workflow mit getrenntem `BasicScheduler` und `CFG Guider` geht der gepatchte `MODEL`-Ausgang an beide. [Blockauswahl und Einstellungen](docs/NODE_KATALOG.md#oneko09-model-patches)
 
 ## Installation
 

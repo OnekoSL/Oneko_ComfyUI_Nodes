@@ -5,9 +5,13 @@ from unittest.mock import patch
 import pytest
 import torch
 
+import comfy.ops
 import comfy.sampler_helpers
 import comfy.samplers
 from comfy.conds import CONDRegular
+from comfy.ldm.anima.model import Anima
+from comfy.ldm.aura.mmdit import MMDiT as AuraFlowDiT
+from comfy.ldm.cosmos.predict2 import MiniTrainDIT
 from comfy.ldm.moss_image import model as moss_core
 from comfy.model_patcher import ModelPatcher, create_model_options_clone
 from comfy.patcher_extension import WrappersMP
@@ -95,6 +99,45 @@ def model_factory(monkeypatch):
     return build
 
 
+@pytest.fixture
+def aura_model_factory():
+    def build(layer_count=4, double_count=2):
+        with torch.random.fork_rng(devices=[]), torch.no_grad():
+            torch.manual_seed(123)
+            diffusion = AuraFlowDiT(
+                dim=32, n_layers=layer_count, n_double_layers=double_count, n_heads=2,
+                global_conddim=32, cond_seq_dim=16, max_seq=25,
+                dtype=torch.float32, operations=torch.nn,
+            )
+            diffusion.positional_encoding.zero_()
+            diffusion.register_tokens.fill_(0.25)
+        cpu = torch.device("cpu")
+        return ModelPatcher(ModelHost(diffusion), load_device=cpu, offload_device=cpu)
+    return build
+
+
+@pytest.fixture
+def anima_model():
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(123)
+        # Exercise the real Anima diffusion path with pre-encoded context and no large text adapter.
+        operations = SimpleNamespace(Linear=torch.nn.Linear, LayerNorm=torch.nn.LayerNorm,
+                                     RMSNorm=comfy.ops.disable_weight_init.RMSNorm)
+        diffusion = Anima.__new__(Anima)
+        MiniTrainDIT.__init__(
+            diffusion, max_img_h=12, max_img_w=12, max_frames=2,
+            in_channels=4, out_channels=4, patch_spatial=2, patch_temporal=1,
+            model_channels=32, num_blocks=3, num_heads=2, mlp_ratio=2.0,
+            crossattn_emb_channels=16, pos_emb_cls="rope3d", dtype=torch.float32,
+            operations=operations,
+        )
+        for module in diffusion.modules():
+            if isinstance(module, operations.RMSNorm):
+                torch.nn.init.ones_(module.weight)
+    cpu = torch.device("cpu")
+    return ModelPatcher(ModelHost(diffusion), load_device=cpu, offload_device=cpu)
+
+
 def noise_patch(model, **overrides):
     values = dict(blocks="all", noise_type="gaussian", noise_strength=0.2, seed=123,
                   start_percent=0.0, end_percent=1.0)
@@ -107,6 +150,18 @@ def runtime_options(patcher, sigma=0.5):
     comfy.sampler_helpers.prepare_model_patcher(patcher, {}, options)
     options["transformer_options"]["sigmas"] = torch.tensor([sigma])
     return options
+
+
+def run_anima(patcher, sigma=0.5):
+    x = torch.linspace(-0.75, 1.2, 2 * 4 * 5 * 7).reshape(2, 4, 1, 5, 7)
+    context = torch.linspace(-0.6, 0.5, 2 * 5 * 16).reshape(2, 5, 16)
+    output = patcher.get_model_object("diffusion_model")(
+        x, torch.full((2,), sigma), context,
+        transformer_options=runtime_options(patcher, sigma)["transformer_options"],
+    )
+    assert output.shape == x.shape
+    assert torch.isfinite(output).all()
+    return output
 
 
 def run_model(patcher, height=3, width=5, text_length=5, sigma=0.5, dtype=torch.float32, **kwargs):
@@ -377,8 +432,129 @@ def test_native_post_cfg_slg_preserves_skipped_branch_in_both_node_orders(model_
     assert "sampler_post_cfg_function" not in original.model_options
 
 
+@pytest.mark.parametrize("counts,blocks,selected,latent_size,raster", [
+    ((4, 2), "1-2", {("double_block", 1), ("single_block", 0)}, (3, 5), (2, 3)),
+    ((36, 4), "15-30", {("single_block", i) for i in range(11, 27)}, (6, 9), (3, 5)),
+])
+@torch.inference_mode()
+def test_native_auraflow_layout_and_block_numbering(aura_model_factory, counts, blocks, selected, latent_size, raster):
+    original = aura_model_factory(*counts)
+    diffusion = original.get_model_object("diffusion_model")
+    native, observed = {}, {}
+
+    for kind, layers in (("double_block", diffusion.double_layers), ("single_block", diffusion.single_layers)):
+        for index, layer in enumerate(layers):
+            key = (kind, index)
+
+            def record_native(module, args, output, key=key):
+                if isinstance(output, tuple):
+                    text, image = output
+                    native[key] = {"img": image.clone(), "txt": text.clone()}
+                else:
+                    native[key] = {"img": output.clone()}
+
+            def observe(args, extra, key=key):
+                result = extra["original_block"](args)
+                observed[key] = {name: tensor.clone() for name, tensor in result.items()}
+                return result
+
+            layer.register_forward_hook(record_native)
+            original.set_model_patch_replace(observe, "dit", kind, index)
+
+    patched = noise_patch(original, blocks=blocks, noise_type="violet", noise_strength=0.12, end_percent=0.5)
+    x = torch.ones(2, 4, *latent_size)
+    context = torch.ones(2, 5, 16)
+    options = runtime_options(patched, sigma=0.6)["transformer_options"]
+    originals = options["patches_replace"]["dit"].copy()
+    with patch.object(dit_noise, "generate_oneko_noise_for_tensor", wraps=dit_noise.generate_oneko_noise_for_tensor) as generate:
+        result = diffusion(x, torch.tensor([0.6, 0.6]), context, options)
+    assert result.shape == x.shape
+    assert torch.isfinite(result).all()
+    assert [call.args[0].shape for call in generate.call_args_list] == [(2, 32, *raster)] * len(selected)
+    assert options["patches_replace"]["dit"] == originals
+    assert original.wrappers == {}
+    assert native.keys() == observed.keys()
+
+    area = raster[0] * raster[1]
+    for key, baseline in native.items():
+        actual = observed[key]
+        if "txt" in baseline:
+            assert torch.equal(actual["txt"], baseline["txt"])
+        assert torch.equal(actual["img"][:, :-area], baseline["img"][:, :-area])
+        assert (not torch.equal(actual["img"][:, -area:], baseline["img"][:, -area:])) == (key in selected)
+
+
+@pytest.mark.parametrize("noise_type", ["gaussian", "highres_pyramid"])
+@torch.inference_mode()
+def test_native_anima_noise_changes_selected_block_before_next_block(anima_model, noise_type):
+    diffusion = anima_model.get_model_object("diffusion_model")
+    inputs = []
+
+    def record_input(module, args):
+        inputs.append(args[0].clone())
+
+    handles = [block.register_forward_pre_hook(record_input) for block in diffusion.blocks]
+    try:
+        baseline_output = run_anima(anima_model)
+        baseline_inputs = inputs[:]
+        inputs.clear()
+        patched = noise_patch(anima_model, blocks="1", noise_type=noise_type)
+        with patch.object(dit_noise, "generate_oneko_noise_for_tensor",
+                          wraps=dit_noise.generate_oneko_noise_for_tensor) as generate:
+            patched_output = run_anima(patched)
+    finally:
+        for handle in handles:
+            handle.remove()
+
+    assert len(baseline_inputs) == len(inputs) == 3
+    torch.testing.assert_close(inputs[0], baseline_inputs[0], rtol=0, atol=0)
+    torch.testing.assert_close(inputs[1], baseline_inputs[1], rtol=0, atol=0)
+    assert not torch.equal(inputs[2], baseline_inputs[2])
+    assert not torch.equal(patched_output, baseline_output)
+    generate.assert_called_once()
+    assert generate.call_args.args[0].shape[-2:] == (3, 4)
+
+
+@torch.inference_mode()
+def test_native_anima_seed_window_and_shared_clone_isolation(anima_model):
+    baseline = run_anima(anima_model)
+    patched = noise_patch(anima_model, blocks="1", seed=123, start_percent=0.25, end_percent=0.75)
+    other = noise_patch(anima_model, blocks="1", seed=456, start_percent=0.25, end_percent=0.75)
+    nested_outputs = []
+
+    def run_original_once(_module, _args):
+        hook.remove()
+        nested_outputs.append(run_anima(anima_model))
+
+    diffusion = anima_model.get_model_object("diffusion_model")
+    with diffusion.blocks[0].register_forward_pre_hook(run_original_once) as hook:
+        first = run_anima(patched)
+
+    assert not torch.equal(first, baseline)
+    assert not torch.equal(run_anima(other), first)
+    torch.testing.assert_close(nested_outputs[0], baseline, rtol=0, atol=0)
+    torch.testing.assert_close(run_anima(patched), first, rtol=0, atol=0)
+    torch.testing.assert_close(run_anima(anima_model), baseline, rtol=0, atol=0)
+    torch.testing.assert_close(run_anima(patched, sigma=0.9), run_anima(anima_model, sigma=0.9), rtol=0, atol=0)
+    assert anima_model.wrappers == {}
+
+
+@torch.inference_mode()
+def test_native_anima_restores_block_hooks_after_failure(anima_model):
+    diffusion = anima_model.get_model_object("diffusion_model")
+    patched = noise_patch(anima_model, blocks="0-1")
+    baseline = run_anima(anima_model)
+    hooks = [block._forward_hooks.copy() for block in diffusion.blocks]
+    with patch.object(dit_noise, "generate_oneko_noise_for_tensor", side_effect=RuntimeError("noise failed")):
+        with pytest.raises(RuntimeError, match="noise failed"):
+            run_anima(patched)
+    assert [block._forward_hooks for block in diffusion.blocks] == hooks
+    torch.testing.assert_close(run_anima(anima_model), baseline, rtol=0, atol=0)
+    assert not torch.equal(run_anima(patched), baseline)
+
+
 @pytest.mark.parametrize("architecture", ["unet", "flux", "lookalike"])
-def test_only_supported_moss_architecture_is_accepted(model_factory, architecture):
+def test_unsupported_architectures_are_rejected(architecture):
     if architecture == "unet":
         from comfy.ldm.modules.diffusionmodules.openaimodel import UNetModel
         cls = UNetModel
@@ -391,7 +567,7 @@ def test_only_supported_moss_architecture_is_accepted(model_factory, architectur
     torch.nn.Module.__init__(diffusion)
     diffusion.layers = torch.nn.ModuleList([RecordingBlock(i) for i in range(3)])
     original = ModelPatcher(ModelHost(diffusion), torch.device("cpu"), torch.device("cpu"))
-    with pytest.raises(ValueError, match="supports MOSS only"):
+    with pytest.raises(ValueError, match="supports MOSS, AuraFlow"):
         noise_patch(original)
     assert original.wrappers == {}
 
@@ -401,7 +577,7 @@ def test_invalid_noise_type_is_not_silently_replaced(model_factory):
         noise_patch(model_factory(), noise_type="unknown-profile")
 
 
-def test_node_import_and_registration_work_without_native_moss_support():
+def test_node_import_and_auraflow_work_without_native_moss_support(model_factory, aura_model_factory):
     import builtins
     import importlib.util
     import sys
@@ -415,10 +591,14 @@ def test_node_import_and_registration_work_without_native_moss_support():
     name = "Oneko_ComfyUI_Nodes.nodes._dit_legacy_import_test"
     spec = importlib.util.spec_from_file_location(name, dit_noise.__file__)
     module = importlib.util.module_from_spec(spec)
+    aura = aura_model_factory()
+    moss = model_factory()
     with patch.dict(sys.modules, {name: module}), patch.object(builtins, "__import__", side_effect=without_moss):
         spec.loader.exec_module(module)
         node = module.NODE_CLASS_MAPPINGS["OnekoDiTBlockNoisePatch"]
         assert node is module.OnekoDiTBlockNoisePatch
         assert module.NODE_DISPLAY_NAME_MAPPINGS["OnekoDiTBlockNoisePatch"]
-        with pytest.raises(ValueError, match="requires ComfyUI with native MOSS support.*Update ComfyUI"):
-            node.execute(object())
+        patched = node.execute(aura, noise_strength=0.2).result[0]
+        assert len(patched.get_all_wrappers(WrappersMP.DIFFUSION_MODEL)) == 1
+        with pytest.raises(ValueError, match="MOSS requires a ComfyUI version with native MOSS support"):
+            node.execute(moss)

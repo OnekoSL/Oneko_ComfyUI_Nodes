@@ -170,12 +170,14 @@ Schreibt neue Lieder oder überarbeitet Ausgangstexte und erzeugt dabei den pass
 
 | Node-ID | Anzeigename | Ausgänge |
 |---|---|---|
-| `OnekoDiTBlockNoisePatch` | [DiT Block Noise (MOSS) (Oneko)](../nodes/dit_block_noise_patch.py) | `MODEL` |
+| `OnekoDiTBlockNoisePatch` | [DiT Block Noise (Oneko)](../nodes/dit_block_noise_patch.py) | `MODEL` |
 | `OnekoUNetBlockNoisePatch` | [UNet Block Noise Patch (Oneko)](../nodes/unet_block_noise_patch.py) | `MODEL` |
 
 UNet Block Noise prüft das tatsächliche Diffusionsmodell und unterstützt Core `UNetModel`, etwa SD1/SD2/SDXL. MOSS/DiT werden von der UNet-Node vor dem Setzen der Hooks mit einem klaren Fehler abgewiesen.
 
-DiT Block Noise unterstützt zunächst MOSS: nullbasierte Blockauswahl (`all`, `0, 4-7, 22` oder leer), vorhandene Noise-Typen, Stärke, Seed und Denoisingfenster. Nur Zielbildtokens erhalten direkt Noise; Text/Referenzen bleiben bei der Injektion erhalten. Ausgelassene SLG-Blöcke überspringen auch Noise. [Beispiel und Grenzen](../examples/README.md#moss-dit-block-noise).
+DiT Block Noise unterstützt Anima, MOSS und AuraFlow (Pony V7). Die nullbasierte Blockauswahl akzeptiert `all`, einzelne Indizes, Bereiche wie `15-30` und eine leere Auswahl. Bei Anima folgen die Indizes der Reihenfolge der Transformer-Blöcke. AuraFlow zählt zuerst die Doppelblöcke, dann die Einzelblöcke. Der Node erzeugt Rauschen auf den Zielbildmerkmalen nach den ausgewählten, ausgeführten Blöcken. Noise-Typ, Seed und Denoising-Zeitfenster gelten für alle drei Architekturen. Stärke `0` lässt die Merkmale unverändert. [Beispiel und Einstellungen](../examples/README.md#moss-dit-block-noise).
+
+Für einen ersten Anima-Vergleich eignen sich `blocks = 4-7`, `noise_type = gaussian` und `noise_strength = 0.05`. Verwende für den Vergleich mit Stärke `0` denselben Seed.
 
 ## Oneko/10 Utilities
 
