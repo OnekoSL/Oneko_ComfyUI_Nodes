@@ -26,6 +26,13 @@ HERO_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </held></helden>"""
 
 
+NUMBERED_EQUIPMENT_XML = HERO_XML.replace(
+    "</gegenstände>",
+    '<gegenstand name="Lederriemen, 1,5 m lang" anzahl="1"/>'
+    '<gegenstand name="Gürtel mit 3 Messingschnallen" anzahl="1"/></gegenstände>',
+)
+
+
 def request_payload(prompt):
     if "Original task:\n" in prompt:
         prompt = prompt.split("Original task:\n", 1)[1].split("\n\nInvalid response", 1)[0]
@@ -222,7 +229,7 @@ def test_document_instruction_text_stays_in_reference_data(transport):
 def test_seed_and_ollama_controls_reach_shared_transport(transport):
     request, unload = transport
     portrait.OnekoOllamaHeroPortrait.execute(prompt_detail="Kompakt",
-        document_text="Ein bärtiger Magier mit blauen Augen.",
+        document_text=NUMBERED_EQUIPMENT_XML,
         ollama_url="http://localhost:12000", ollama_model="installed-model",
         seed=123456, temperature=0.8, top_p=0.95, timeout_seconds=240,
         context_length="16384", unload_after_run=False,
@@ -233,8 +240,12 @@ def test_seed_and_ollama_controls_reach_shared_transport(transport):
     source_fields = json.loads(args[2])["source_fields"]
     schema = kwargs["output_schema"]
     assert set(schema["required"]) == {"translations", "equipment_ids", "omitted_fact_ids", "embellishment", "report"}
-    assert set(schema["properties"]["translations"]["required"]) == set(source_fields)
-    assert schema["properties"]["translations"]["additionalProperties"] is False
+    translation_schema = schema["properties"]["translations"]
+    equipment_ids = {"equipment_0", "equipment_1", "equipment_2"}
+    assert equipment_ids <= set(source_fields)
+    assert set(translation_schema["required"]) == set(source_fields) - equipment_ids
+    assert set(translation_schema["properties"]) == set(source_fields)
+    assert translation_schema["additionalProperties"] is False
     assert kwargs["reasoning"] is False
     assert kwargs["num_predict"] >= 1400
     unload.assert_called_once_with("http://localhost:12000", "installed-model", 240, False)
@@ -468,6 +479,116 @@ def test_crop_style_light_and_scene_survive_short_model_fragments(framing, expec
         "A figure looking left", "Standing on a branch", "At the forest edge",
     ))
     assert "Pose übernommen" in report and "Hintergrund übernommen" in report
+
+
+@pytest.mark.parametrize("source_decimal,translated_decimal", [("1,5", "1.5"), ("1.5", "1,5")])
+def test_equipment_translation_accepts_either_decimal_separator(source_decimal, translated_decimal, transport):
+    request, unload = transport
+    translated_strap = f"A leather strap {translated_decimal} m long"
+
+    def reply(*args, **kwargs):
+        data = response_data(args[2])
+        data["translations"]["equipment_1"] = translated_strap
+        return json.dumps(data, ensure_ascii=False)
+
+    request.side_effect = reply
+    positive = portrait.OnekoOllamaHeroPortrait.execute(
+        prompt_detail="Kompakt", document_text=NUMBERED_EQUIPMENT_XML.replace("1,5", source_decimal),
+    ).result[0]
+    assert translated_strap in positive
+    request.assert_called_once()
+    unload.assert_called_once()
+
+
+@pytest.mark.parametrize("translation", [None, "", "A belt with 2 brass buckles"])
+def test_invalid_unselected_equipment_does_not_trigger_repair(translation, transport):
+    request, unload = transport
+
+    def reply(*args, **kwargs):
+        data = response_data(args[2])
+        data["equipment_ids"] = ["equipment_0"]
+        if translation is None:
+            del data["translations"]["equipment_2"]
+        else:
+            data["translations"]["equipment_2"] = translation
+        return json.dumps(data, ensure_ascii=False)
+
+    request.side_effect = reply
+    positive, _, summary, report, _ = portrait.OnekoOllamaHeroPortrait.execute(
+        prompt_detail="Kompakt", document_text=NUMBERED_EQUIPMENT_XML,
+    ).result
+    assert "Green cloak" in positive
+    assert "Gürtel" not in positive and "brass buckles" not in positive
+    assert "Gürtel mit 3 Messingschnallen" in json.loads(summary)["equipment"]
+    assert "equipment_2" not in report
+    request.assert_called_once()
+    unload.assert_called_once()
+
+
+@pytest.mark.parametrize("translation", [None, "", "A belt with 2 brass buckles"])
+def test_invalid_selected_equipment_uses_source_after_one_repair(translation, transport):
+    request, unload = transport
+
+    def reply(*args, **kwargs):
+        data = response_data(args[2])
+        data["translations"]["equipment_1"] = "A leather strap 1.5 m long"
+        if translation is None:
+            del data["translations"]["equipment_2"]
+        else:
+            data["translations"]["equipment_2"] = translation
+        return json.dumps(data, ensure_ascii=False)
+
+    request.side_effect = reply
+    positive, _, summary, report, filename = portrait.OnekoOllamaHeroPortrait.execute(
+        prompt_detail="Kompakt", document_text=NUMBERED_EQUIPMENT_XML, pose="Steht auf einem Ast.",
+    ).result
+    assert "Gürtel mit 3 Messingschnallen" in positive
+    assert "2 brass buckles" not in positive
+    assert "A leather strap 1.5 m long" in positive
+    assert "Green cloak" in positive and "Standing on a branch" in positive
+    assert "Gürtel mit 3 Messingschnallen" in json.loads(summary)["equipment"]
+    assert "equipment_2" in report
+    assert filename == "Testheldin"
+    assert request.call_count == 2
+    unload.assert_called_once()
+
+
+def test_selected_equipment_translation_uses_successful_repair(transport):
+    request, unload = transport
+
+    def reply(*args, **kwargs):
+        data = response_data(args[2])
+        count = 2 if request.call_count == 1 else 3
+        data["translations"]["equipment_2"] = f"A belt with {count} brass buckles"
+        return json.dumps(data, ensure_ascii=False)
+
+    request.side_effect = reply
+    positive, _, _, report, _ = portrait.OnekoOllamaHeroPortrait.execute(
+        prompt_detail="Kompakt", document_text=NUMBERED_EQUIPMENT_XML,
+    ).result
+    assert "A belt with 3 brass buckles" in positive
+    assert "Gürtel mit 3 Messingschnallen" not in positive
+    assert "equipment_2" not in report
+    assert request.call_count == 2
+    unload.assert_called_once()
+
+
+def test_mandatory_number_mismatch_still_fails_after_one_repair(transport):
+    request, unload = transport
+
+    def reply(*args, **kwargs):
+        data = response_data(args[2])
+        data["translations"]["pose"] = "Standing beside 2 torches"
+        return json.dumps(data, ensure_ascii=False)
+
+    request.side_effect = reply
+    with pytest.raises(RuntimeError, match="Zahlenangaben.*'pose'"):
+        portrait.OnekoOllamaHeroPortrait.execute(
+            prompt_detail="Kompakt", document_text=NUMBERED_EQUIPMENT_XML,
+            pose="Steht neben 3 Fackeln.",
+        )
+    assert request.call_count == 2
+    unload.assert_called_once()
 
 
 def test_german_prompt_uses_local_german_controls_and_style_negative(transport):

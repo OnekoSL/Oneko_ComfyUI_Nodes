@@ -41,7 +41,9 @@ Bekannte Spezies erhalten eine knappe visuelle Erläuterung: **Amaunir** werden 
 
 Fehlende Pflichtangaben und unbekannte Inventarverweise werden geprüft. Für bekannte Farben, körperliche Merkmale und Inventarbezeichnungen verwendet die Node feste englische Übersetzungen: Schwarze Haare bleiben etwa `black hair`, ein Armreif wird `bracelet`, und beim Federhut bleibt die Feder erhalten. Die eingelesenen Quelldaten und `character_summary` werden dabei nicht verändert. Unbekannte Begriffe übersetzt weiterhin Ollama; deren inhaltliche Genauigkeit bleibt modellabhängig, die spätere Bildkomposition vom Bildmodell. `report` wird lokal aus verarbeiteten Angaben, Promptbestandteilen und Reparaturstatus erstellt und enthält keine freien Erfolgsbehauptungen des Sprachmodells. Den fertigen Prompt deshalb vor größeren Bildserien kontrollieren.
 
-Die erweiterten Einstellungen enthalten Ollama-Adresse, Modell, Seed, Temperatur, Kontextlänge, Zeitlimit und automatisches Entladen. Für vergleichbare Läufe den Seed auf `fixed` stellen. Änderungen am Dateiinhalt werden auch bei gleichem Dateinamen erkannt. Fehlerhafte Modellantworten werden einmal zur Reparatur vorgelegt; bleibt die Antwort ungültig, meldet die Node einen Fehler.
+**Zahlen und Inventar.** Bei der Zahlenprüfung gelten Punkt und Komma als gleichwertige Dezimaltrennzeichen. Die Node benötigt Übersetzungen für die ausgewählten Inventareinträge. Fehlt eine dieser Übersetzungen, ist sie leer oder weichen die Zahlenangaben ab, fordert die Node einmal eine Reparatur an. Bleibt der Eintrag ungültig, verwendet sie eine vorhandene feste Übersetzung oder übernimmt die Quellbezeichnung wortgetreu. Die Inventar-ID steht in `report`. Ein ungültiges Quelldokument oder ein Fehler in den Pflichtangaben, den die Reparatur nicht behebt, bricht den Lauf ab.
+
+Die erweiterten Einstellungen enthalten Ollama-Adresse, Modell, Seed, Temperatur, Kontextlänge, Zeitlimit und automatisches Entladen. Für vergleichbare Läufe den Seed auf `fixed` stellen. Änderungen am Dateiinhalt werden auch bei gleichem Dateinamen erkannt.
 
 ## MOSS: Oneko-Grundpipeline
 
