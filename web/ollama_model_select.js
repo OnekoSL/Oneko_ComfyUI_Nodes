@@ -3,6 +3,11 @@ import { api } from "../../../scripts/api.js";
 
 const TARGET_NODES = [
     {
+        className: "OnekoOllamaHeroPortrait",
+        displayName: "Ollama Hero Portrait (Oneko)",
+        fallbackModel: "autoren-darkidol-llama-3-1-8b:latest",
+    },
+    {
         className: "OnekoOllamaVerseMaker",
         displayName: "Ollama Verse Maker (Oneko)",
         fallbackModel: "autoren-darkidol-llama-3-1-8b:latest",

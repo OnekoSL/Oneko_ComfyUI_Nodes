@@ -1,5 +1,37 @@
 # Migration zu Oneko
 
+## Heldenporträt: freigegebene Dateiordner
+
+Gespeicherte `document_path`-Werte funktionieren weiter, wenn die Datei im ComfyUI-Eingabeordner oder einem zusätzlich freigegebenen Ordner liegt. Für bestehende Workflows mit anderen Pfaden kannst du den Ordner als Administrator in `oneko_hero_document_paths.json` freigeben. Die Datei liegt im ComfyUI-Basisverzeichnis. Änderungen an ihr greifen bei der nächsten Pfadprüfung. Alternativ die Datei in den Eingabeordner legen und den Pfad im Workflow anpassen oder ihren Inhalt über `document_text` eingeben. Auch ein per Verknüpfung erreichbares Ziel muss in einem freigegebenen Ordner liegen. [Konfigurationsbeispiel](../examples/README.md#ordner-für-heldendateien-freigeben)
+
+## Heldenporträt: verlässliche Zahlenangaben
+
+Numerische Altersangaben werden als eigener fester Textbaustein aus dem Dokument übernommen; numerische Größe und Gewicht werden ebenfalls lokal formuliert. Damit kann eine ausgelassene oder ausgeschriebene Modellübersetzung dieser Werte keinen Serienabbruch mehr verursachen. Explizite Altersänderungen über Zusatzvorgaben bleiben möglich. Unstrukturierte Angaben werden weiterhin übersetzt und geprüft. Eingänge, Ausgänge und gespeicherte Widgetpositionen bleiben gleich; der Cache-Stand wird erhöht. Die Python-Korrektur benötigt einen ComfyUI-Neustart nach Abschluss laufender Aufträge.
+
+## Heldenporträt: Dateiauswahl und Rotation wieder sichtbar
+
+Die Frontend-Helfer werden gemeinsam versioniert geladen, damit ein Update keine neue JavaScript-Einstiegsdatei mit älteren zwischengespeicherten Modulen verbindet. Nach dieser reinen Frontend-Korrektur genügt das Neuladen der Browserseite; ein ComfyUI-Neustart ist nicht erforderlich. Die Node muss nicht ersetzt werden. Der Dateiauswahlbutton speichert außerdem keinen zusätzlichen Positionswert mehr im Workflow. Gespeicherte Rotationsoptionen bleiben in den Node-Eigenschaften erhalten.
+
+## Heldenporträt: ausführliche Beschreibungen und Begriffserklärungen
+
+Die optionalen Eingänge `prompt_detail` (**Ausführlichkeit**) und `term_explanations` (**Begriffserklärungen**) werden hinter den bisherigen Eingängen ergänzt. Die bisherigen Widgetpositionen und alle fünf Ausgänge bleiben erhalten. Der Standard ist **Ausführlich**, auch für API-Aufträge ohne den neuen Parameter; **Kompakt** fordert die bisherige knappe Beschreibung an. Fachbegriffe werden in allen Modi aufgelöst. Ausführliche Modi verwenden für vorhandene freie Beschreibungsfelder einen zusätzlichen Ollama-Schritt; Fehler dort erhalten die validierte Erstbeschreibung mit einem Hinweis im Bericht. Das Modell wird nach dem gesamten Ablauf entladen. ComfyUI nach Abschluss laufender Aufträge neu starten und die Browserseite mit **Strg+F5** neu laden.
+
+Berufsangaben werden getrennt von Spezies, Alter und Geschlecht verarbeitet. Ein kleines geprüftes Wörterbuch löst bekannte Begriffe in verständliche Beschreibungen auf; eigene Zeilen `Begriff = Beschreibung` haben bei exakter Übereinstimmung Vorrang. Die Quelldaten in `character_summary` und der Dateiname bleiben unverändert. `report` nennt tatsächlich verwendete Auflösungen und nicht geklärte Spezialisierungen bekannter Grundberufe. **Dokumenttreu** erlaubt auch bei mehr Text keine erfundenen Charaktermerkmale; feste Farben und Inventarbezeichnungen bleiben geschützt. [Bedienung und Quellen](../examples/README.md#ollama-hero-portrait).
+
+## Heldenporträt: Heldenname im Bilddateinamen
+
+`OnekoOllamaHeroPortrait` hat den zusätzlichen fünften STRING-Ausgang `filename_hero_name` (Index 4). Die bisherigen vier Ausgänge behalten ihre Indizes, alle Eingaben und Widgetpositionen bleiben unverändert. ComfyUI nach Abschluss laufender Aufträge neu starten und die Oberfläche mit **Strg+F5** neu laden.
+
+Für automatische Serien `filename_hero_name` und `filename_modelname` des Bildmodell-Loaders mit **Concatenate Text**, Trennzeichen `__`, verbinden. Das Ergebnis an `Save Image.filename_prefix` anschließen oder zuvor den bisherigen Ausgabeordner voranstellen. Beide Namen stammen aus dem tatsächlich ausgeführten Auftrag; bereits weitergeschaltete Auswahlfelder beeinflussen den gespeicherten Namen nicht. Der Name wird lokal aus dem Heldendokument gelesen. Der Bildmodellname ist kein Eingang der Ollama-Node, sodass ein Modellwechsel allein keine zusätzliche Promptübersetzung auslöst. [Bedienung und Ersatznamen](../examples/README.md#ollama-hero-portrait).
+
+## Universal Noise Sampler Advanced: dosierbare Noise-Profile
+
+Die nachfolgenden optionalen Regler `detail_boost` und `detail_start` ergänzen eine späte Detailkorrektur während des Samplings. Neue Nodes starten mit **0.10 / 0.65**. Bereits gespeicherte Werte werden übernommen; API-Prompts ohne `detail_boost` verwenden weiterhin den neutralen Python-Fallback 0. Die bisherigen Widgets einschließlich `profile_blend` bleiben an ihren Positionen. Für Vergleiche Seed, `detail_bias`, Modell und Sampling-Einstellungen festhalten. Ein späterer Start begrenzt den Eingriff stärker. ComfyUI neu starten und die Oberfläche neu laden, um die neuen Standardwerte zu laden. [Funktionsumfang und Grenzen](NODE_KATALOG.md#oneko05-sampling).
+
+Nach einem ComfyUI-Neustart und Neuladen der Oberfläche steht nach `preview_method` der optionale Regler `profile_blend` bereit. **1** erhält das bisherige Noise-Profil einschließlich Seed-Verhalten; fehlende Werte in API-Prompts verwenden ebenfalls 1. **0** verwendet Gaussian. Bestehende Widgetpositionen, Anschlüsse und Node-IDs bleiben erhalten.
+
+`gaussian_detail` wurde am Ende der gemeinsamen Profilliste ergänzt, damit bisherige Cycler-Indizes unverändert bleiben. Dieses Profil ausdrücklich auswählen; `detail_bias=0` liefert exakt Gaussian. Mit 0.35 beginnt eine sanfte räumliche Frequenzanhebung. Der bisherige Default `gaussian` bleibt bestehen. Bei `pyramid_mix`, `violet` und anderen Basic-Profilen bleibt `detail_bias` ohne Wirkung; deren Einfluss kann jetzt über `profile_blend` dosiert werden. [Bedienung und Grenzen](NODE_KATALOG.md#oneko05-sampling).
+
 ## Version 0.2.1: lokale USDU- und Preview-Einstellungen
 
 Node-IDs, Anschlüsse, Widgetreihenfolge, Defaults und Seed-Berechnung bleiben erhalten. Bestehende Workflows benötigen keine Änderungen. ComfyUI nach dem Ende laufender Aufträge neu starten, um den neuen Quellstand zu laden.
@@ -44,7 +76,7 @@ In der geprüften USDU-Version 1.7.2 fehlt dem Sampler eine `noise_mask`. `use_d
 
 ## Neue MOSS-DiT-Noise-Node
 
-`OnekoDiTBlockNoisePatch` ist eine zusätzliche V3-Node; die UNet-Node-ID und vorhandene Workflows behalten ihre Bedeutung. Für MOSS die neue Node im Modellpfad vor dem Sampler hinzufügen. Stärke 0 ist neutral. Bestehende UNet-Nodes werden nicht automatisch ersetzt. Die neue Node benötigt einen Core mit nativer MOSS- und Diffusionswrapper-Unterstützung; umgesetzt und geprüft auf dem lokalen ComfyUI-0.45.0-Stand. Fehlt das MOSS-Modul, bleibt das Paket importierbar; erst der Aufruf der DiT-Node meldet das nötige ComfyUI-Update.
+`OnekoDiTBlockNoisePatch` ist eine zusätzliche V3-Node; die UNet-Node-ID und vorhandene Workflows behalten ihre Bedeutung. Für MOSS die neue Node im Modellpfad vor dem Sampler hinzufügen. Stärke 0 ist neutral. Bestehende UNet-Nodes werden nicht automatisch ersetzt. Für MOSS benötigt die Node einen Core mit nativer MOSS- und Diffusionswrapper-Unterstützung. Der ursprüngliche MOSS-Pfad wurde mit ComfyUI 0.45.0 geprüft. Der aktuelle Entwicklungsstand unterstützt auch AuraFlow (Pony V7) und Anima auf Core-Versionen mit der jeweiligen nativen Modellunterstützung. Fehlt das MOSS-Modul, kann das Paket weiterhin geladen werden.
 
 ## Regional Rect und UNet Block Noise
 

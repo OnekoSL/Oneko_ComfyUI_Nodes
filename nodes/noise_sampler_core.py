@@ -1,4 +1,6 @@
+import copy
 import hashlib
+import math
 import struct
 
 import numpy as np
@@ -6,6 +8,7 @@ import torch
 import torch.nn.functional as F
 
 import comfy.model_management
+import comfy.model_patcher
 import comfy.nested_tensor
 import comfy.sample
 import comfy.utils
@@ -43,6 +46,7 @@ UNIVERSAL_NOISE_PROFILES = (
     NOISE_TYPES
     + [f"illustrious_{mode}" for mode in ILLUSTRIOUS_MODES]
     + [f"pony_v7_{profile}" for profile in PONY_V7_PROFILES]
+    + ["gaussian_detail"]
 )
 PREVIEW_METHODS = ["default", "latent2rgb", "taesd", "none"]
 SPECTRAL_NOISE_ALPHA = {
@@ -101,6 +105,34 @@ class OnekoCompositeNoise:
         )
 
 
+class OnekoDetailNoise:
+    def __init__(self, seed, noise_device, noise_strength, detail_bias):
+        self.seed = seed
+        self.noise_device = noise_device
+        self.noise_strength = noise_strength
+        self.detail_bias = detail_bias
+
+    def generate_noise(self, input_latent):
+        base = OnekoRandomNoise(self.seed, self.noise_device).generate_noise(input_latent)
+        detailed = _detail_noise_like(base, self.detail_bias)
+        return _scale_noise_like(detailed, self.noise_strength)
+
+
+class OnekoBlendedNoise:
+    def __init__(self, gaussian, profile, profile_blend, noise_strength):
+        self.seed = gaussian.seed
+        self.gaussian = gaussian
+        self.profile = profile
+        self.profile_blend = profile_blend
+        self.noise_strength = noise_strength
+
+    def generate_noise(self, input_latent):
+        base = self.gaussian.generate_noise(input_latent)
+        profile = self.profile.generate_noise(input_latent)
+        blended = _blend_noise_like(base, profile, self.profile_blend)
+        return _scale_noise_like(blended, self.noise_strength)
+
+
 class OnekoUniversalNoise:
     def __init__(self, seed, noise_device, noise_profile="gaussian", noise_strength=1.0, detail_bias=0.35):
         self.seed = seed
@@ -120,9 +152,21 @@ class OnekoUniversalNoise:
         return noise.generate_noise(input_latent)
 
 
-def make_noise_generator(seed, noise_device, noise_profile="gaussian", noise_strength=1.0, detail_bias=0.35):
+def make_noise_generator(seed, noise_device, noise_profile="gaussian", noise_strength=1.0, detail_bias=0.35, profile_blend=1.0):
     if noise_profile not in UNIVERSAL_NOISE_PROFILES:
         raise ValueError(f"Unknown Oneko noise profile: {noise_profile!r}")
+    profile_blend = max(0.0, min(1.0, float(profile_blend)))
+    if profile_blend == 0.0 or float(noise_strength) == 0.0:
+        return OnekoRandomNoise(seed, noise_device, "gaussian", noise_strength)
+    if profile_blend < 1.0 and noise_profile != "gaussian":
+        return OnekoBlendedNoise(
+            OnekoRandomNoise(seed, noise_device),
+            make_noise_generator(seed, noise_device, noise_profile, 1.0, detail_bias),
+            profile_blend,
+            noise_strength,
+        )
+    if noise_profile == "gaussian_detail":
+        return OnekoDetailNoise(seed, noise_device, noise_strength, detail_bias)
     if noise_profile in NOISE_TYPES:
         return OnekoRandomNoise(seed, noise_device, noise_profile, noise_strength)
 
@@ -146,6 +190,51 @@ def make_noise_generator(seed, noise_device, noise_profile="gaussian", noise_str
             detail_bias,
         )
 
+
+
+def guider_with_late_detail(guider, sigmas, strength=0.0, start=0.65):
+    strength = float(strength)
+    if strength == 0.0 or sigmas.numel() < 2 or float(start) >= 1.0:
+        return guider
+    start_index = min(int((sigmas.numel() - 1) * max(0.0, float(start))), sigmas.numel() - 2)
+    sigma_start = float(sigmas[start_index])
+    sigma_end = float(sigmas[-1])
+    if sigma_start <= sigma_end:
+        return guider
+
+    def post_cfg(args):
+        denoised = args["denoised"]
+        sigma = float(args["sigma"].flatten()[0])
+        progress = (sigma_start - sigma) / (sigma_start - sigma_end)
+        if not 0.0 < progress < 1.0:
+            return denoised
+        amount = strength * math.sin(math.pi * progress) ** 2
+        return _boost_spatial_detail(denoised, amount)
+
+    # Keep guider subclasses, conditioning and existing model patches. The
+    # added callback belongs only to this sampling call's cloned patcher.
+    local = copy.copy(guider)
+    local.model_patcher = guider.model_patcher.clone()
+    local.model_patcher.model_options = comfy.model_patcher.create_model_options_clone(guider.model_options)
+    local.model_patcher.set_model_sampler_post_cfg_function(post_cfg)
+    local.model_options = local.model_patcher.model_options
+    return local
+
+
+def _boost_spatial_detail(denoised, amount):
+    if float(amount) == 0.0 or denoised.ndim < 4:
+        return denoised
+    height, width = denoised.shape[-2:]
+    fy = torch.fft.fftfreq(height, device=denoised.device, dtype=torch.float32)
+    fx = torch.fft.rfftfreq(width, device=denoised.device, dtype=torch.float32)
+    radius = (fy[:, None].square() + fx[None, :].square()).sqrt()
+    # Protect wavelengths of five latent cells or larger. A smooth transition
+    # avoids a hard spectral edge; DC/low frequencies receive no correction.
+    band = ((radius - 0.20) / 0.25).clamp(0.0, 1.0)
+    band = band.square() * (3.0 - 2.0 * band)
+    spectrum = torch.fft.rfft2(denoised.float(), dim=(-2, -1))
+    detail = torch.fft.irfft2(spectrum * band, s=(height, width), dim=(-2, -1))
+    return (denoised.float() + float(amount) * detail).to(denoised.dtype)
 
 
 def sample_custom_advanced(
@@ -492,6 +581,47 @@ def _normalize_tensor(tensor):
     if not torch.isfinite(std) or std <= 1e-8:
         return torch.zeros_like(tensor)
     return tensor / std
+
+
+def _match_noise_statistics(noise, reference):
+    # Preserve each batch item's Gaussian scale; mixing correlated profiles
+    # otherwise changes the effective noise strength.
+    dims = tuple(range(1, noise.ndim)) or (0,)
+    variance, mean = torch.var_mean(noise.float(), dim=dims, correction=0, keepdim=True)
+    ref_variance, ref_mean = torch.var_mean(reference.float(), dim=dims, correction=0, keepdim=True)
+    matched = (noise - mean) * (ref_variance / variance.clamp_min(1e-12)).sqrt() + ref_mean
+    return torch.where(variance > 1e-12, matched, reference.float()).to(reference.dtype)
+
+
+def _blend_noise_like(base, profile, amount):
+    if _is_nested_noise(base):
+        return comfy.nested_tensor.NestedTensor([
+            _blend_noise_like(a, b, amount) for a, b in zip(base.unbind(), profile.unbind())
+        ])
+    blended = base.float() * (1.0 - float(amount)) + profile.float() * float(amount)
+    return _match_noise_statistics(blended, base)
+
+
+def _detail_noise_like(noise, detail_bias):
+    amount = max(0.0, min(1.0, float(detail_bias)))
+    if amount == 0.0:
+        return noise
+    if _is_nested_noise(noise):
+        return comfy.nested_tensor.NestedTensor([
+            _detail_noise_like(tensor, amount) for tensor in noise.unbind()
+        ])
+    if noise.ndim < 4:
+        return noise
+
+    height, width = noise.shape[-2:]
+    y_freq = torch.fft.fftfreq(height, device=noise.device, dtype=torch.float32)
+    x_freq = torch.fft.rfftfreq(width, device=noise.device, dtype=torch.float32)
+    # A bounded high-frequency lift of the same Gaussian draw retains its
+    # Fourier phases. Only spatial axes are filtered, including for video.
+    gain = 1.0 + amount * 2.0 * (y_freq[:, None].square() + x_freq[None, :].square())
+    spectrum = torch.fft.rfft2(noise.float(), dim=(-2, -1))
+    detailed = torch.fft.irfft2(spectrum * gain, s=(height, width), dim=(-2, -1))
+    return _match_noise_statistics(detailed, noise)
 
 
 def _scale_noise_like(noise, strength):
