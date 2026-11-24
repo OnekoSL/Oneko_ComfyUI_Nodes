@@ -103,7 +103,23 @@ Das neue gemeinsame Profil `gaussian_detail` hebt räumliche hohe Frequenzen des
 |---|---|---|
 | `OnekoEmptyLatentAspectRatio` | [Empty Latent Aspect Ratio (Oneko)](../nodes/empty_latent_aspect_ratio.py) | `LATENT, INT width, INT height` |
 
-Seitenverhältnisse und MP-Budget über den Core Resolution Selector oder freie Maße über `custom`. Hoch-/Querformat tauschen, beide Seiten skalieren und einen Batch leerer Bild-Latents erstellen. `width` und `height` geben die tatsächlich ausgerichteten Endmaße zurück.
+Standard-Seitenverhältnisse über den Core Resolution Selector, zusätzliche Banner-/Wallpaper-Formate mit demselben MP-Budget oder freie Maße über `custom`. Hoch-/Querformat tauschen, beide Seiten skalieren und einen Batch leerer Bild-Latents erstellen. `width` und `height` geben die tatsächlich ausgerichteten Endmaße zurück.
+
+Zusätzlich zu 16:9 und 21:9 stehen folgende Formate bereit. Beispielmaße gelten für **1.5 MP, MOSS/FLUX.2, scale_factor=1**; das Latentraster kann das Seitenverhältnis leicht runden.
+
+| Auswahl | Verwendung | Beispielmaße |
+|---|---|---|
+| `5:4 (Classic Monitor)` | Klassischer Monitor | 1408 × 1120 |
+| `16:10 (Desktop Wallpaper)` | Desktop-Wallpaper | 1584 × 992 |
+| `32:9 (Super Ultrawide)` | Super-Ultrawide oder zwei 16:9-Monitore | 2368 × 672 |
+| `32:10 (Dual Monitor)` | Zwei 16:10-Monitore | 2240 × 704 |
+| `9:20 (Phone Wallpaper)` | Handy-Wallpaper | 848 × 1872 |
+| `2:1 (Banner)` | Breites Banner | 1776 × 880 |
+| `3:1 (Wide Banner)` | Sehr breites Banner | 2176 × 720 |
+| `4:1 (Panoramic Banner)` | Panoramabanner | 2512 × 624 |
+| `5:1 (Header Banner)` | Flacher Header | 2800 × 560 |
+
+`megapixels` bestimmt die Bildfläche (1 MP = 1024 × 1024); `swap_dimensions` dreht jedes Format. Feste Zielmaße lassen sich über `custom` einstellen; sie werden ebenfalls auf das Latentraster gerundet.
 
 `auto` erzeugt ein Core-Latent mit Skalierungsmetadaten; der Sampler passt Kanäle und Auflösung an sein Modell an. Manuell: SD1/SDXL (4 Kanäle, Faktor 8), SD3/FLUX.1 (16, Faktor 8) oder MOSS/FLUX.2 (128, Faktor 16). Auto und MOSS runden auf 16er-, die anderen Formate auf 8er-Schritte.
 

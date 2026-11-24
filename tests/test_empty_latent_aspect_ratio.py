@@ -59,6 +59,39 @@ def test_aspect_preset_uses_megapixels_instead_of_custom_inputs():
     assert (width, height) == (1360, 768)
 
 
+@pytest.mark.parametrize("latent_format,channels,divisor", [
+    ("SD1 / SDXL", 4, 8),
+    ("MOSS / FLUX.2", 128, 16),
+])
+@pytest.mark.parametrize("aspect_ratio,dimensions8,dimensions16", [
+    ("5:4 (Classic Monitor)", (1400, 1120), (1408, 1120)),
+    ("16:10 (Desktop Wallpaper)", (1584, 992), (1584, 992)),
+    ("32:9 (Super Ultrawide)", (2368, 664), (2368, 672)),
+    ("32:10 (Dual Monitor)", (2240, 704), (2240, 704)),
+    ("9:20 (Phone Wallpaper)", (840, 1872), (848, 1872)),
+    ("2:1 (Banner)", (1776, 888), (1776, 880)),
+    ("3:1 (Wide Banner)", (2176, 728), (2176, 720)),
+    ("4:1 (Panoramic Banner)", (2512, 624), (2512, 624)),
+    ("5:1 (Header Banner)", (2808, 560), (2800, 560)),
+])
+def test_banner_and_wallpaper_dimensions(aspect_ratio, dimensions8, dimensions16, latent_format, channels, divisor):
+    latent, width, height = OnekoEmptyLatentAspectRatio.execute(
+        aspect_ratio=aspect_ratio, megapixels=1.5, width=512, height=512, latent_format=latent_format,
+    ).result
+    assert (width, height) == (dimensions16 if divisor == 16 else dimensions8)
+    assert latent["samples"].shape == (1, channels, height // divisor, width // divisor)
+    assert latent["downscale_ratio_spacial"] == divisor
+
+
+def test_banner_megapixels_swap_and_scale():
+    latent, width, height = OnekoEmptyLatentAspectRatio.execute(
+        aspect_ratio="4:1 (Panoramic Banner)", megapixels=1.0,
+        swap_dimensions=True, scale_factor=0.5, latent_format="MOSS / FLUX.2",
+    ).result
+    assert (width, height) == (256, 1024)
+    assert latent["samples"].shape == (1, 128, 64, 16)
+
+
 def test_swap_then_scale_and_return_final_dimensions():
     latent, width, height = OnekoEmptyLatentAspectRatio.execute(
         swap_dimensions=True, scale_factor=0.5, latent_format="MOSS / FLUX.2",
