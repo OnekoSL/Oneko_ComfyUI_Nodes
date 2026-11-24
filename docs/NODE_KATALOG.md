@@ -2,6 +2,61 @@
 
 46 öffentliche Nodes im aktuellen Entwicklungsstand auf Basis von Version 0.2.1, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
 
+## Modellkompatibilität aller Nodes
+
+Die Übersicht beschreibt die Eingabeverträge des aktuellen Quellstands mit ComfyUI 0.46.0. Die CPU-Prüfung deckt Registrierung, Schnittstellen und ausgewählte Core-Pfade ab. GPU-Läufe mit echten Modellgewichten sind für die jeweils genannten Workflows belegt. [Validierungsprotokoll](VALIDIERUNG.md)
+
+### Loader, Conditioning und Regionen
+
+| Nodes | Voraussetzungen und Modellbeispiele |
+|---|---|
+| Checkpoint Cycler Loader | Verwendet den Core-Checkpoint-Loader. Geeignet für vollständige Checkpoints, aus denen der Core `MODEL`, `CLIP` und `VAE` bereitstellt, etwa vollständige SDXL-Checkpoints. |
+| Diffusion Model + CLIP + VAE Cycler Loader | Lädt drei getrennte Komponenten über den Core. Wähle die zum Diffusionsmodell passenden Dateien. MOSS-Image verwendet `clip_type=moss_image`. Bei Krea 2 passt der Node die Standardwahl `stable_diffusion` an. Für Setups mit mehreren getrennten Textencodern, etwa FLUX.1 mit CLIP-L und T5 oder SD3 mit drei Encodern, ist der passende Core-Dual- oder Triple-Loader erforderlich. |
+| T5/Qwen Equal-Length Prompt Balancer, T5/Qwen Sculpt Equal-Length Prompt Balancer | Setzen einen unterstützten T5-/Qwen-Stream voraus. Beispiele sind Anima (`qwen3_06b`), AuraFlow/Pony V7 (`pile_t5xl`), SD3 und FLUX.1 mit T5, FLUX.2 Klein mit Qwen, Qwen-Image, Z-Image, Krea 2 und Wan mit UMT5. Für reine CLIP-Encoder wie SDXL/Pony V6 eignet sich CLIP Sculpt. Mistral in FLUX.2 Dev liegt außerhalb der Stream-Auswahl. |
+| CLIP Sculpt Text Encode, Regional Sculpt Prompt Encoder | Verwenden das native Encoding des angeschlossenen `CLIP`. Die Sculpt-Funktion greift auf zugängliche Embedding-Tabellen zu, etwa CLIP in SDXL oder Qwen in Anima. Bei Anima bleiben die T5-Adapter-IDs erhalten. Erkannte Qwen-Chatvorlagen schützen Rollen und Sondertoken. |
+| Conditioning Analyzer, Conditioning Adjust | Analyzer untersucht `CONDITIONING` und gibt es weiter. Adjust bietet Profile für SD 1.5, SDXL-CLIP, T5 und MOSS-Image. Bei aktivem MOSS-Adjust muss das Conditioning gültige Oneko-Markierungen für die Nutzertextpositionen tragen. Für andere Encoder verwendet `auto` eine Heuristik. |
+| Regional Prompt Encoder | Kodiert die Regionen über den angeschlossenen Core-kompatiblen Textencoder. |
+| Regional Rect Masks, Split Masks | Erzeugen 2D-Masken aus der Bildgröße und den Regionskoordinaten, unabhängig vom Modell. |
+| Native Regional Rect Conditioning, Native Regional Split Conditioning | Verwenden Core-Masken mit bereits passendem `CONDITIONING`. Für `mask bounds` bei 5D-Latents wie Anima ist eine separate Korrektur im ComfyUI-Core erforderlich. Ohne diese Korrektur bei 5D-Latents `set_cond_area=default` verwenden. |
+
+Beide Balancer erhalten bei MOSS-Image die nativen Positiv- und Negativlängen. Bei Anima ist der Qwen-Stream das Längenziel. Die T5-Adapter-IDs und zugehörigen Gewichte behalten ihre nativen Längen. [Balancer-Implementierung](../nodes/t5_equal_length_balancer.py) · [MOSS-Bildvergleiche](VALIDIERUNG.md#moss-paket-f-integration-und-regressionen)
+
+Die hier geprüfte 5D-Korrektur ist eine separate lokale Änderung am ComfyUI-Core. Sie berechnet eine räumliche Begrenzung über alle Frames. Für die Gewichtung bleiben die Maskenwerte der einzelnen Frames erhalten. Bei einer statischen 2D-Maske gilt dieselbe Maske für alle Frames. Core-Versionen ohne diese Korrektur können bei `mask bounds` mit einer nichtleeren 5D-Maske den Fehler `too many values to unpack (expected 2)` melden. Mit dem lokalen Fix lief AnimaBreeze auf einer RTX 4060 Ti mit `mask bounds` in beiden Nodes. Bei identischen Masken und festem Seed waren die Rect- und Split-Bilder pixelgleich. [Native Regional-Nodes](../nodes/regional_split_regions.py) · [Regionale GPU-Läufe mit MOSS-Image](VALIDIERUNG.md#echte-aktive-sculpt--und-regional-läufe)
+
+### Sampling, Latents und Bildverarbeitung
+
+| Nodes | Voraussetzungen und Modellbeispiele |
+|---|---|
+| Universal KSampler | Verwendet den Core-Sampler für ein Modell mit passendem Conditioning und Latent. Für einen konkreten MOSS-Image-GPU-Lauf ist Pixelgleichheit zum Core-Sampler belegt. |
+| Universal Noise Sampler, Universal Noise Sampler Advanced | Verwenden die bereitgestellten `GUIDER`, `SAMPLER` und `SIGMAS`. Advanced ergänzt Noise-Mischung und optionalen späten Detail-Boost für räumliche 4D-/5D-Vorhersagen. GPU-Läufe mit Advanced sind für MOSS-Image sowie lokal für Anima und Krea 2 belegt. |
+| Noise Profile Cycler | Gibt Noise-Profile und Zählerwerte aus. Namen wie `illustrious_*` und `pony_v7_*` bezeichnen Rauschrezepte. |
+| Empty Latent Aspect Ratio | Erzeugt leere Bild-Latents. Mit `auto` passt der Core Kanäle, räumliches Raster und bei Anima, Krea 2 sowie Qwen-Image die Zeitachse mit einem Frame an. Für ein Wan-Video mit mehreren Frames den passenden Video-Latent-Node verwenden. |
+| Load Image with Subfolders | Lädt Bilder und Masken über den Core-Decoder und arbeitet unabhängig vom nachgeschalteten Modell. |
+| HiResFix Tiled | Benötigt ein passendes Bildmodell, Conditioning, VAE, `UPSCALE_MODEL` und Ultimate SD Upscale. Bildläufe sind für MOSS-Image und lokal für Anima belegt. Für Faktor-16-VAEs werden externe `reference_latents` abgewiesen. Die optionale interne Referenz ist standardmäßig aus. |
+| Pixel Anchored Remaster | Benötigt ein passendes Bildmodell, Conditioning und VAE. Verwendet gekacheltes VAE-Encoding/-Decoding und Core-Sampling. Faktor 8 und 16 wurden auf CPU geprüft, ein MOSS-Image-GPU-Lauf ist dokumentiert. Die optionale Referenz ist standardmäßig an. |
+| UNet Block Noise Patch, DiT Block Noise | Verlangen die jeweilige Modellarchitektur. Die Übersicht enthält die unterstützten Modellfamilien und Beispiele. [Block Noise nach Modellarchitektur](../README.md#block-noise-nach-modellarchitektur) |
+
+Der CPU-Test mit dem Core bestätigte das Raster von `auto` für SD 1.5, SD 2.x, SDXL, SD3, AuraFlow, Anima, MOSS-Image, FLUX.1/2/3, Krea 2, Qwen-Image und Z-Image. Für Anima, Krea 2 und Qwen-Image wurde dabei die Form `B,C,1,H,W` erzeugt. [Latent-Implementierung](../nodes/empty_latent_aspect_ratio.py)
+
+Zusätzliche Bildreferenzen in HiResFix und Remaster wirken bei Modellen, die `reference_latents` auswerten, etwa MOSS-Image oder Krea 2. Anima verwendet im geprüften Core den normalen Img2Img-Pfad. [HiResFix](../nodes/hiresfix_tiled.py) · [Remaster](../nodes/pixel_anchored_remaster.py) · [GPU-Vergleiche](VALIDIERUNG.md#echte-hiresfix--und-remaster-läufe)
+
+### Text, Video und Audio
+
+| Nodes | Voraussetzungen und Modellbeispiele |
+|---|---|
+| Ollama Prompt Refiner | Verwendet ein Ollama-Textmodell und gibt Strings aus. Die Zielprofile für Pony V6/V7, Illustrious, Anima, MOSS-Image, Krea 2, Z-Image und Wan 2.2 steuern das Promptformat. |
+| Ollama Hero Portrait | Verarbeitet XML/TXT oder eingegebenen Text mit einem Ollama-Textmodell. Das Ergebnis kann an den Encoder des gewünschten Bildmodells weitergegeben werden. |
+| Ollama Video Prompt Refiner | Verwendet ein Ollama-Textmodell und formatiert Text-Prompts für MiniMax H3 oder Wan 2.2. |
+| Ollama Vision Captioner | Benötigt ein `IMAGE` und ein Ollama-Modell mit Bildunterstützung. Bei einem Batch beschreibt die Node das erste Bild. |
+| MiniMax H3 Prompt Builder, Random Vocab String List, Multi Vocab String List | Setzen lokale Texte und Vokabular zusammen. Beim H3-Builder folgt die Ausgabe dem H3-Promptformat. |
+| Wan 2.2 Video Settings, Wan 2.2 Run Manifest, Wan 2.2 Continuation Plan, Wan 2.2 Continuation Record, Wan 2.2 Continuation Manifest | Erzeugen Einstellungen und Metadaten für TI2V-/Fortsetzungsworkflows anhand von Auflösung, Länge und Iterationen. Die eigentliche Generierung erfolgt in den nachgeschalteten Nodes. |
+| Wan 2.2 TI2V Latent | Erzeugt das Video-Latent für **Wan 2.2 TI2V-5B** mit 48 Kanälen, räumlichem Faktor 16 und zeitlichem Faktor 4. I2V benötigt ein Eingabebild und die passende Wan-2.2-VAE. |
+| Wan 2.2 Segment Store, Wan 2.2 Segment Loader, Wan 2.2 Frame Sequence Assembler | Speichern, laden und exportieren Bildframes anhand der Laufmetadaten. Der MP4-Export benötigt `imageio` und `imageio-ffmpeg` sowie eine vollständige Sequenz gleich großer Frames. |
+| ACE Song Variation Director, Ollama Verse Maker | Verarbeiten Text über Ollama. Die ACE-Vorgaben des Directors richten Arrangements und Abschnitte für ACE-Step 1.5 aus. |
+| ACE Song Timeline Conditioning | Benötigt den ACE-Step-1.5-Textencoder und passendes Basis-`CONDITIONING` mit Audio-Codes. |
+| Audio Timeline Mixer 5, Audio Track Settings, Audio Timeline Mixer | Arbeiten mit Mono-/Stereo-`AUDIO`. Audio Track Settings liefert die Spurpakete für den modularen Audio Timeline Mixer. |
+| Incrementing Int to String | Formatiert Zahlen und Strings unabhängig vom Modell. |
+
 ## Oneko/01 Loaders
 
 | Node-ID | Anzeigename | Ausgänge |
@@ -73,7 +128,7 @@ Die Masken sind an den jeweiligen Encoding-Tensor gebunden; nachträgliche Vekto
 | `OnekoNativeRegionalRectConditioning` | [Native Regional Rect Conditioning (Oneko)](../nodes/regional_split_regions.py) | `CONDITIONING, MASK, MASK, MASK` |
 | `OnekoNativeRegionalSplitConditioning` | [Native Regional Split Conditioning (Oneko)](../nodes/regional_split_regions.py) | `CONDITIONING, MASK, MASK, MASK` |
 
-Regional Rect und Split verwenden native Core-Masken: Lücken bleiben frei, Überlappungen werden nach Maskenwerten/Stärken gemischt. `default` berechnet das gesamte Bild, `mask bounds` den Maskenbereich. Die Maskenskalierung folgt der tatsächlichen Latentgröße und unterstützt damit auch MOSS-Latents mit Faktor 16. [Bedienbeispiel](../examples/README.md#moss-regional-rect-und-split).
+Regional Rect und Split verwenden native Core-Masken. Lücken bleiben frei, Überlappungen werden nach Maskenwerten und Stärken gemischt. `default` berechnet das gesamte Bild. `mask bounds` beschränkt die Berechnung räumlich auf den Maskenbereich. Für 5D-Latents wie bei Anima benötigt der Modus die separate Core-Korrektur. Die Maskenskalierung folgt der tatsächlichen Latentgröße und unterstützt damit auch MOSS-Latents mit Faktor 16. [Bedienbeispiel](../examples/README.md#moss-regional-rect-und-split)
 
 ## Oneko/04 Regional/Encode
 

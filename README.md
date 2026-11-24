@@ -37,6 +37,8 @@ Maßgeblich ist die Architektur des geladenen `MODEL`. Auch Anima kann über **L
 
 Verbinde den Ausgang des passenden Patch-Nodes mit dem `model`-Eingang des Samplers. Bei einem Workflow mit getrenntem `BasicScheduler` und `CFG Guider` geht der gepatchte `MODEL`-Ausgang an beide. [Blockauswahl und Einstellungen](docs/NODE_KATALOG.md#oneko09-model-patches)
 
+Die Modell- und Eingabeanforderungen der Loader, Conditioning-Nodes, Sampler, Upscaler sowie der Video- und Audio-Nodes stehen im Node-Katalog. [Modellkompatibilität aller Nodes](docs/NODE_KATALOG.md#modellkompatibilität-aller-nodes)
+
 ## Installation
 
 Aus dem Ordner `ComfyUI/custom_nodes` installieren:

@@ -125,7 +125,7 @@ Die Ausgänge `conditioning_1`, `conditioning_2` und bei drei Regionen `conditio
 
 Mit `region_count=3` alle drei Conditionings verbinden; zunächst `set_cond_area=default`, Stärken jeweils 1 und `soft_edge=0` verwenden. `soft_edge` ist eine Kantenglättung in Bildpixeln. Bei zwei Regionen bleibt `mask_3` leer.
 
-Die ausgegebenen Masken entsprechen den gewählten Rechtecken: Lücken werden nicht automatisch gefüllt oder einer anderen Region zugewiesen. Für einen überall beschriebenen Hintergrund das Bild vollständig mit Regionen abdecken oder ein globales Conditioning über Core `ConditioningCombine` hinzufügen; dieses wirkt dann auch innerhalb der Regionen mit. In Überlappungen mischt Core die Modellvorhersagen nach Maskenwerten und Stärken. `default` berechnet pro Region das gesamte Bild; `mask bounds` beschränkt die Berechnung auf den Maskenbereich und kann deshalb Komposition und Bildwirkung verändern.
+Die ausgegebenen Masken entsprechen den gewählten Rechtecken: Lücken werden nicht automatisch gefüllt oder einer anderen Region zugewiesen. Für einen überall beschriebenen Hintergrund das Bild vollständig mit Regionen abdecken oder ein globales Conditioning über Core `ConditioningCombine` hinzufügen; dieses wirkt dann auch innerhalb der Regionen mit. In Überlappungen mischt Core die Modellvorhersagen nach Maskenwerten und Stärken. `default` berechnet pro Region das gesamte Bild; `mask bounds` beschränkt die Berechnung auf den Maskenbereich und kann deshalb Komposition und Bildwirkung verändern. Für diesen Modus bei 5D-Latents wie Anima ist eine separate Core-Korrektur erforderlich. Mit Core-Versionen ohne die Korrektur bei 5D-Latents `default` verwenden.
 
 ## MOSS: DiT Block Noise
 

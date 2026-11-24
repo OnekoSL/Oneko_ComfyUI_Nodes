@@ -72,7 +72,7 @@ In der geprüften USDU-Version 1.7.2 fehlt dem Sampler eine `noise_mask`. `use_d
 
 ## Neue MOSS-DiT-Noise-Node
 
-`OnekoDiTBlockNoisePatch` ist eine zusätzliche V3-Node; die UNet-Node-ID und vorhandene Workflows behalten ihre Bedeutung. Für MOSS die neue Node im Modellpfad vor dem Sampler hinzufügen. Stärke 0 ist neutral. Bestehende UNet-Nodes werden nicht automatisch ersetzt. Die neue Node benötigt einen Core mit nativer MOSS- und Diffusionswrapper-Unterstützung; umgesetzt und geprüft auf dem lokalen ComfyUI-0.45.0-Stand. Fehlt das MOSS-Modul, bleibt das Paket importierbar; erst der Aufruf der DiT-Node meldet das nötige ComfyUI-Update.
+`OnekoDiTBlockNoisePatch` ist eine zusätzliche V3-Node; die UNet-Node-ID und vorhandene Workflows behalten ihre Bedeutung. Für MOSS die neue Node im Modellpfad vor dem Sampler hinzufügen. Stärke 0 ist neutral. Bestehende UNet-Nodes werden nicht automatisch ersetzt. Für MOSS benötigt die Node einen Core mit nativer MOSS- und Diffusionswrapper-Unterstützung. Der ursprüngliche MOSS-Pfad wurde mit ComfyUI 0.45.0 geprüft. Der aktuelle Entwicklungsstand unterstützt auch AuraFlow (Pony V7) und Anima auf Core-Versionen mit der jeweiligen nativen Modellunterstützung. Fehlt das MOSS-Modul, kann das Paket weiterhin geladen werden.
 
 ## Regional Rect und UNet Block Noise
 
