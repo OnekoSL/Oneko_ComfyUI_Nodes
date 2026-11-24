@@ -1,5 +1,25 @@
 # Validierungsstand
 
+## Späte Detailkorrektur im Universal Noise Sampler Advanced — 15.11.2026
+
+**Gesamte Python-Suite: 1.165 Tests und 66 Untertests bestanden, 25,50 s.** Die neue Datei `tests/test_late_sampling_detail.py` ergänzt 18 Fälle. Native MOSS-CPU-Läufe mit Euler/Heun und CFG 1/2.5 bestätigen den identischen frühen Sampling-Verlauf, unveränderte Zahl der Modellvorhersagen, erhaltene Masken/Metadaten sowie den exakt neutralen Zustand bei Stärke 0. Bestehende Post-CFG-Callbacks bleiben erhalten; Fehlerpfade und gleichzeitig ausgeführte Detailcallbacks hinterlassen keine Hooks am ursprünglichen Guider/ModelPatcher.
+
+Spektraltests bestätigen unveränderte grobe räumliche Frequenzen bis 0.20 Zyklen pro Latentzelle und unveränderte Kanalmittelwerte innerhalb der Float32-Rechengenauigkeit. Bild-/Videoformen, Float32/Float16/BFloat16, identische Batch-Bilder, RNG-Isolation und der Bypass für flach gepackte Vorhersagen sind geprüft. Die Isolation der Callbacks ist keine Zusage für beliebige parallele GPU-Modellausführung.
+
+Eine lokale Vergleichsvorlage für 1536 × 1024, Heun/beta57 und 50 Schritte verbindet zwei Advanced-Nodes mit gleichen Eingaben und festen Seeds: `detail_boost=0` gegen `0.08`, Start jeweils `0.65`. Alle 15 Nodes und 23 Links sind geprüft; frische Backend-Definitionen bestehen Cores native CPU-Promptvalidierung mit beiden Bildausgängen und ohne Node-Fehler. Persönlicher Workflow und Prompt bleiben außerhalb des Repositories.
+
+**Grenze:** Für diese späte Detailkorrektur wurden noch keine neuen GPU-Bilder erzeugt. Die Frequenzgarantie gilt für die direkte Korrektur der Modellvorhersage; nachfolgende Denoising-Schritte und der VAE können trotzdem Bildaufbau und Materialwirkung verändern. Die bisherigen GPU-Bilder im nächsten Abschnitt prüfen ausschließlich die ältere Noise-Erweiterung. Aktivierung der neuen optionalen Regler erfordert einen ComfyUI-Neustart und Neuladen der Oberfläche.
+
+## Universal Noise Sampler Advanced: Profilmischung und Gaussian Detail — 15.11.2026
+
+**Gesamte Python-Suite: 1.147 Tests und 66 Untertests bestanden, 15,27 s.** Die gezielte Auswahl für Noise und Sampler besteht mit 229 Tests und drei Untertests. Geprüft sind native Gaussian-Endpunkte, deterministische Seeds ohne Änderung des globalen Torch-RNG, wiederholte Batch-Indizes, Float32/Float16/BFloat16, 4/16/128 Kanäle, Bild-/Videoformen, verschachtelte Streams, einmalige Anwendung der Rauschstärke und gleiche Statistik pro Batch-Bild. Spektraltests prüfen eine zunehmende Hochfrequenzgewichtung bei erhaltenen Phasen der Nicht-DC-Frequenzen; native MOSS-CPU-Samplingvergleiche schließen Masken und `add_noise=false` ein.
+
+Ein separater Vergleich mit der vor der Änderung auf I: gesicherten Quelldatei bestätigt **174 bitgleiche Noise-Ausgaben**: alle 29 bisherigen Profile, drei Dtypes und normale/indexierte Batches. Default und `profile_blend=1` erhalten den bisherigen Pfad. Das neue Profil steht am Ende der Liste; vorhandene Cycler-Indizes und Widgetpositionen bleiben erhalten.
+
+**Echter GPU-Vergleich:** vier erfolgreiche Bildläufe mit vorhandenem MiaoMiao RealSkin MOSS SFT 1.0 FP16, Qwen3.5-9B-Heretic-NVFP4 und Flux2-VAE Small auf einer RTX 4060 Ti mit 16 GB. Alle Varianten verwenden denselben Prompt und Seed, 1024 × 688, 30 Schritte, Heun, nativen `beta`-Scheduler und CFG 3; Block Noise und SPEED sind nicht aktiv. Verglichen werden nativer KSampler/Gaussian, `gaussian_detail` mit Bias 0.35, bisheriges `pyramid_mix` und dessen Mischung mit `profile_blend=0.20`. Laufzeit des Vergleichsprompts: **435,6 s**. Das neue Eingabeschema wurde vom getrennten Testserver geladen, der API-Prompt ohne Node-Fehler validiert; die gespeicherte lokale Vergleichsvorlage hat 21 Nodes und 38 überprüfte Links. Persönlicher Workflow, Prompts und Bilder bleiben außerhalb des Repositories.
+
+Sichtprüfung dieser Szene: Gaussian Detail erhält weitgehend die Bildanlage des nativen Vergleichs und verändert insbesondere Fell/Kleidung. Reines Pyramid Mix kippt hier in eine bunte Innenhofszene; mit 20 Prozent bleibt die graue Seeszene erhalten. Das belegt die dosierbare Profilwirkung, **keinen allgemeinen Detail- oder Schärfegewinn**. Weitere Seeds, andere Modellfamilien, volle 1536 × 1024 und CUDA-seitig erzeugtes Noise sind nicht durch diese vier Bildläufe abgedeckt. Der Testserver wurde beendet; die ursprüngliche ComfyUI-Instanz blieb bestehen und benötigt zur Aktivierung der neuen Node einen Neustart.
+
 ## Release 0.2.1: lokale USDU- und Preview-Einstellungen — 15.11.2026
 
 Onekos globale USDU-Sampling-Ersetzung und Preview-Umschaltung sind abgelöst. HiResFix bindet Noise und interne Referenzen über Cores `OUTER_SAMPLE` an ein geklontes Modell. Referenzen werden vor Cores Speicherbedarfsermittlung und Conditioning-Aufbereitung ergänzt und anschließend auch bei Fehlern zurückgesetzt. Explizite Preview-Methoden verwenden eigene Callbacks und native Decoder; `default` delegiert an Core.

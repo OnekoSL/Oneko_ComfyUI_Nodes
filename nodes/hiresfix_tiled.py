@@ -114,7 +114,7 @@ class OnekoHiResFixTiled:
                         "min": 0.0,
                         "max": 1.0,
                         "step": 0.01,
-                        "tooltip": "Only affects composite tile noise profiles such as illustrious_* and pony_v7_*.",
+                        "tooltip": "Affects gaussian_detail and composite tile noise profiles such as illustrious_* and pony_v7_*.",
                     },
                 ),
             },

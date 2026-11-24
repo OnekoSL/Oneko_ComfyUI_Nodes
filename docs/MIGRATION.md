@@ -1,5 +1,13 @@
 # Migration zu Oneko
 
+## Universal Noise Sampler Advanced: dosierbare Noise-Profile
+
+Die nachfolgenden optionalen Regler `detail_boost` und `detail_start` ergänzen eine späte Detailkorrektur während des Samplings. Neue Nodes starten mit **0.10 / 0.65**. Bereits gespeicherte Werte werden übernommen; API-Prompts ohne `detail_boost` verwenden weiterhin den neutralen Python-Fallback 0. Die bisherigen Widgets einschließlich `profile_blend` bleiben an ihren Positionen. Für Vergleiche Seed, `detail_bias`, Modell und Sampling-Einstellungen festhalten. Ein späterer Start begrenzt den Eingriff stärker. ComfyUI neu starten und die Oberfläche neu laden, um die neuen Standardwerte zu laden. [Funktionsumfang und Grenzen](NODE_KATALOG.md#oneko05-sampling).
+
+Nach einem ComfyUI-Neustart und Neuladen der Oberfläche steht nach `preview_method` der optionale Regler `profile_blend` bereit. **1** erhält das bisherige Noise-Profil einschließlich Seed-Verhalten; fehlende Werte in API-Prompts verwenden ebenfalls 1. **0** verwendet Gaussian. Bestehende Widgetpositionen, Anschlüsse und Node-IDs bleiben erhalten.
+
+`gaussian_detail` wurde am Ende der gemeinsamen Profilliste ergänzt, damit bisherige Cycler-Indizes unverändert bleiben. Dieses Profil ausdrücklich auswählen; `detail_bias=0` liefert exakt Gaussian. Mit 0.35 beginnt eine sanfte räumliche Frequenzanhebung. Der bisherige Default `gaussian` bleibt bestehen. Bei `pyramid_mix`, `violet` und anderen Basic-Profilen bleibt `detail_bias` ohne Wirkung; deren Einfluss kann jetzt über `profile_blend` dosiert werden. [Bedienung und Grenzen](NODE_KATALOG.md#oneko05-sampling).
+
 ## Version 0.2.1: lokale USDU- und Preview-Einstellungen
 
 Node-IDs, Anschlüsse, Widgetreihenfolge, Defaults und Seed-Berechnung bleiben erhalten. Bestehende Workflows benötigen keine Änderungen. ComfyUI nach dem Ende laufender Aufträge neu starten, um den neuen Quellstand zu laden.

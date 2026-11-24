@@ -7,6 +7,7 @@ from .noise_sampler_core import (
     PREVIEW_METHODS,
     UNIVERSAL_NOISE_PROFILES,
     OnekoEmptyNoise,
+    guider_with_late_detail,
     make_noise_generator,
     sample_custom_advanced,
 )
@@ -69,7 +70,7 @@ class OnekoUniversalNoiseSampler:
                         "min": 0.0,
                         "max": 1.0,
                         "step": 0.01,
-                        "tooltip": "Only affects composite profiles. Lower values emphasize larger forms; higher values emphasize details.",
+                        "tooltip": "Controls composite profiles and gaussian_detail (0 = Gaussian; higher = more spatial high-frequency noise). Has no effect on basic profiles such as pyramid_mix or violet.",
                     },
                 ),
                 "preview_method": (
@@ -155,7 +156,7 @@ class OnekoUniversalNoiseSamplerAdvanced:
                     UNIVERSAL_NOISE_PROFILES,
                     {
                         "default": "gaussian",
-                        "tooltip": "Basic noise type or composite Oneko profile.",
+                        "tooltip": "gaussian is the native baseline. gaussian_detail gently raises spatial high frequencies using the same Gaussian seed. Other profiles can strongly change composition.",
                     },
                 ),
                 "noise_strength": (
@@ -175,7 +176,7 @@ class OnekoUniversalNoiseSamplerAdvanced:
                         "min": 0.0,
                         "max": 1.0,
                         "step": 0.01,
-                        "tooltip": "Only affects composite profiles. Lower values emphasize larger forms; higher values emphasize details.",
+                        "tooltip": "gaussian_detail: 0 is exactly Gaussian; higher values raise spatial high frequencies, keeping noise strength. Also controls composite profiles. No effect on basic profiles such as pyramid_mix or violet.",
                     },
                 ),
                 "start_at_step": (
@@ -211,13 +212,45 @@ class OnekoUniversalNoiseSamplerAdvanced:
                     },
                 ),
             },
+            "optional": {
+                "profile_blend": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.01,
+                        "tooltip": "0 = native Gaussian for this seed, 1 = selected profile unchanged (legacy). Intermediate values mix the profile into Gaussian while preserving each sample's noise scale. Try 0.10-0.25 for strong profiles such as pyramid_mix or violet. This is not denoise strength.",
+                    },
+                ),
+                "detail_boost": (
+                    "FLOAT",
+                    {
+                        "default": 0.10,
+                        "min": 0.0,
+                        "max": 0.5,
+                        "step": 0.01,
+                        "tooltip": "Optional late-sampling boost of fine spatial structure in the denoised prediction. Low spatial frequencies are excluded from the correction. New nodes start at 0.10; 0 disables the boost. Stronger values can produce harsh textures. No extra model evaluations. Spatial image/video predictions only.",
+                    },
+                ),
+                "detail_start": (
+                    "FLOAT",
+                    {
+                        "default": 0.65,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.01,
+                        "tooltip": "Start the detail boost this far into the incoming full sigma schedule. 0.65 leaves the first 65% of steps untouched; the effect fades in and out over the remaining sigma interval. Later starts reduce composition changes. 1 disables the boost.",
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = ("LATENT", "LATENT", "INT")
     RETURN_NAMES = ("output", "denoised_output", "seed")
     FUNCTION = "sample"
     CATEGORY = "Oneko/05 Sampling"
-    DESCRIPTION = "Universal Noise Sampler with KSampler Advanced-style step range controls."
+    DESCRIPTION = "Universal Noise Sampler with step ranges, Gaussian/profile blending and optional late spatial detail. Detail boost preserves early sampling and excludes coarse frequencies from its correction; image quality and composition still depend on the model and settings."
 
     def sample(
         self,
@@ -235,12 +268,16 @@ class OnekoUniversalNoiseSamplerAdvanced:
         end_at_step=10000,
         return_with_leftover_noise="disable",
         preview_method="default",
+        profile_blend=1.0,
+        detail_boost=0.0,
+        detail_start=0.65,
     ):
         if add_noise:
-            noise = make_noise_generator(noise_seed, noise_device, noise_profile, noise_strength, detail_bias)
+            noise = make_noise_generator(noise_seed, noise_device, noise_profile, noise_strength, detail_bias, profile_blend)
         else:
             noise = OnekoEmptyNoise()
 
+        guider = guider_with_late_detail(guider, sigmas, detail_boost, detail_start)
         return sample_custom_advanced(
             guider,
             sampler,
@@ -350,7 +387,7 @@ class OnekoUniversalKSampler:
                         "min": 0.0,
                         "max": 1.0,
                         "step": 0.01,
-                        "tooltip": "Only affects composite profiles. Lower values emphasize larger forms; higher values emphasize details.",
+                        "tooltip": "Controls composite profiles and gaussian_detail (0 = Gaussian; higher = more spatial high-frequency noise). Has no effect on basic profiles such as pyramid_mix or violet.",
                     },
                 ),
                 "preview_method": (
