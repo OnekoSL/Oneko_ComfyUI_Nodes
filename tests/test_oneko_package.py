@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 import torch
 
+from comfy_api.latest import io
 import Oneko_ComfyUI_Nodes as package
 from Oneko_ComfyUI_Nodes.nodes import load_image_with_subfolders as loader
 from Oneko_ComfyUI_Nodes.nodes import noise_sampler_core as noise
@@ -15,17 +16,22 @@ from Oneko_ComfyUI_Nodes.tools.migrate_workflow import migrate_workflow
 
 
 def test_package_contracts_and_frontend_targets():
-    assert len(package.NODE_CLASS_MAPPINGS) == 46
+    assert len(package.NODE_CLASS_MAPPINGS) == 48
     assert package.NODE_CLASS_MAPPINGS.keys() == package.NODE_DISPLAY_NAME_MAPPINGS.keys()
     for name, cls in package.NODE_CLASS_MAPPINGS.items():
         assert name.startswith("Oneko")
         assert cls.CATEGORY.startswith("Oneko/")
         assert callable(getattr(cls, cls.FUNCTION))
+        if issubclass(cls, io.ComfyNode):
+            schema = cls.GET_SCHEMA()
+            assert schema.node_id == name
+            assert schema.display_name == package.NODE_DISPLAY_NAME_MAPPINGS[name]
     repo = Path(package.__file__).parent
     mapping = json.loads((repo / "migration/node_id_map.json").read_text(encoding="utf-8"))
     assert set(package.NODE_CLASS_MAPPINGS) - set(mapping.values()) == {
         "OnekoAudioTrackSettings", "OnekoAudioTimelineMixer", "OnekoOllamaVerseMaker", "OnekoEmptyLatentAspectRatio",
-        "OnekoDiTBlockNoisePatch", "OnekoOllamaHeroPortrait",
+        "OnekoDiTBlockNoisePatch", "OnekoOllamaHeroPortrait", "OnekoConditioningTokenRandomize",
+        "OnekoModelWeightRandomize",
     }
     frontend = "\n".join(f.read_text(encoding="utf-8") for f in (repo / "web").iterdir())
     assert "/oneko/ollama/models" in frontend
