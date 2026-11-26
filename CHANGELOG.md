@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 — 2026-11-26
+
+Die Sammlung wächst von 45 auf **48 öffentliche Nodes**. Neu sind reproduzierbare Zufallsänderungen an Conditioning und Modellgewichten sowie Ollama Hero Portrait.
+
+### Neue Funktionen
+
+- **Conditioning Token Randomize:** mischt kodierte Tokenvektoren mit Zufallsrichtungen derselben Länge. Stärke 0–1, fester Seed und wählbarer Tokenbereich; Stärke 0 reicht das Original unverändert weiter. Animas T5-Adapterdaten bleiben erhalten. Mit gültigem Oneko-Encoder-Kontext schützt MOSS seine Rollen-, Thinking- und Sondertoken.
+- **Model Weight Randomize:** verändert unterstützte Gewichtsmatrizen und Faltungskernel über Cores ModelPatcher am geklonten Inferenzmodell. Stärke 0–1 und Seed bestimmen die Mischung; Checkpointdateien bleiben unverändert. Blockauswahl für Core-UNets sowie frühe, mittlere und späte Transformer-Blöcke bei Anima und MOSS-Image.
+- **Fünf Randomizer-Beispiele:** einzelne Token-/Gewichtsvergleiche, ein UNet-Blockvergleich bei 0,040 sowie Anima- und MOSS-Vorlagen. Feste Seeds und eine gemeinsame Sigma-Folge machen die jeweiligen Vergleiche nachvollziehbar.
+- **Ollama Hero Portrait:** erzeugt Prompts aus Helden-XML oder Text, mit Pose, Hintergrund, Bildausschnitt, Stil und Detailgrad. Lokale Dateiauswahl, automatische Dateirotation, Begriffserklärungen und Heldenname als Dateinamen-Ausgang ergänzen die Node. Zahlenangaben und Inventarübersetzungen werden geprüft; ungültige Inventarübersetzungen erhalten einen dokumentierten Fallback. Dateizugriffe sind auf freigegebene Ordner begrenzt.
+- **Sampling:** `profile_blend` mischt Noise-Profile mit Gaussian, `gaussian_detail` ergänzt eine steuerbare Frequenzanhebung. `detail_boost` und `detail_start` steuern eine späte Detailkorrektur im Universal Noise Sampler Advanced.
+- **Weitere Erweiterungen:** DiT Block Noise unterstützt Anima und AuraFlow; Empty Latent Aspect Ratio ergänzt Banner- und Wallpaper-Presets. Der Node-Katalog beschreibt Modellkompatibilität und benötigte Core-Funktionen.
+
+### Update und Validierung
+
+- Nach dem Update ComfyUI nach Abschluss laufender Aufträge neu starten und die Browserseite neu laden. Modellnamen in den Beispielen durch lokal vorhandene Dateien ersetzen. Neue Randomizer starten mit Stärke 0.
+- IDs und bestehende Anschlüsse bleiben erhalten. Neue Advanced-Sampler-Nodes starten mit `detail_boost=0.10` und `detail_start=0.65`; API-Prompts ohne `detail_boost` behalten den neutralen Fallback 0. Für Hero-Dokumente außerhalb des Eingabeordners zusätzliche Ordner ausdrücklich freigeben. [Migration und Bedienung](docs/MIGRATION.md).
+- **1.508 Python-Tests und 66 Untertests bestanden, 2 Tests übersprungen; 73 JavaScript-Tests bestanden.** Geprüft mit ComfyUI 0.46.0, Python 3.12.10 und PyTorch 2.11.0+cu130. Frühere GPU-Funktionsläufe der Randomizer mit Pony XL, Anima und MOSS-Image ergänzen die CPU-Releaseprüfung. Die gestalterische Wirkung bleibt modell-, seed- und stärkenabhängig. [Prüfumfang](docs/VALIDIERUNG.md).
+
 ## 0.2.1 — 2026-11-15
 
 - HiResFix bindet Noise und interne Referenzen über Cores `OUTER_SAMPLE` an ein geklontes Modell. Die globale Samplingfunktion von USDU wird auch bei Fehlern nicht mehr ersetzt; bestehende Modellwrapper bleiben aktiv.

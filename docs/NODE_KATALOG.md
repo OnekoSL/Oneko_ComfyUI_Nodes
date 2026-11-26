@@ -1,6 +1,6 @@
-# Node-Katalog: Oneko 0.2.1
+# Node-Katalog: Oneko 0.3.0
 
-46 öffentliche Nodes im aktuellen Entwicklungsstand auf Basis von Version 0.2.1, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
+48 öffentliche Nodes in Version 0.3.0, nach Menükategorie sortiert. Alle Implementierungen befinden sich im Repository. Zukünftige Vorschläge stehen getrennt in `ROADMAP.md`.
 
 ## Modellkompatibilität aller Nodes
 
@@ -15,6 +15,7 @@ Die Übersicht beschreibt die Eingabeverträge des aktuellen Quellstands mit Com
 | T5/Qwen Equal-Length Prompt Balancer, T5/Qwen Sculpt Equal-Length Prompt Balancer | Setzen einen unterstützten T5-/Qwen-Stream voraus. Beispiele sind Anima (`qwen3_06b`), AuraFlow/Pony V7 (`pile_t5xl`), SD3 und FLUX.1 mit T5, FLUX.2 Klein mit Qwen, Qwen-Image, Z-Image, Krea 2 und Wan mit UMT5. Für reine CLIP-Encoder wie SDXL/Pony V6 eignet sich CLIP Sculpt. Mistral in FLUX.2 Dev liegt außerhalb der Stream-Auswahl. |
 | CLIP Sculpt Text Encode, Regional Sculpt Prompt Encoder | Verwenden das native Encoding des angeschlossenen `CLIP`. Die Sculpt-Funktion greift auf zugängliche Embedding-Tabellen zu, etwa CLIP in SDXL oder Qwen in Anima. Bei Anima bleiben die T5-Adapter-IDs erhalten. Erkannte Qwen-Chatvorlagen schützen Rollen und Sondertoken. |
 | Conditioning Analyzer, Conditioning Adjust | Analyzer untersucht `CONDITIONING` und gibt es weiter. Adjust bietet Profile für SD 1.5, SDXL-CLIP, T5 und MOSS-Image. Bei aktivem MOSS-Adjust muss das Conditioning gültige Oneko-Markierungen für die Nutzertextpositionen tragen. Für andere Encoder verwendet `auto` eine Heuristik. |
+| Conditioning Token Randomize | Mischt Float-Tokenvektoren aus einem `CONDITIONING` mit Zufallsvektoren. Bei Anima wirkt es auf den Qwen-Stream. Bei MOSS-Image unterstützt es geschützte Nutzertextpositionen aus Oneko-Encodern. |
 | Regional Prompt Encoder | Kodiert die Regionen über den angeschlossenen Core-kompatiblen Textencoder. |
 | Regional Rect Masks, Split Masks | Erzeugen 2D-Masken aus der Bildgröße und den Regionskoordinaten, unabhängig vom Modell. |
 | Native Regional Rect Conditioning, Native Regional Split Conditioning | Verwenden Core-Masken mit bereits passendem `CONDITIONING`. Für `mask bounds` bei 5D-Latents wie Anima ist eine separate Korrektur im ComfyUI-Core erforderlich. Ohne diese Korrektur bei 5D-Latents `set_cond_area=default` verwenden. |
@@ -35,6 +36,7 @@ Die hier geprüfte 5D-Korrektur ist eine separate lokale Änderung am ComfyUI-Co
 | HiResFix Tiled | Benötigt ein passendes Bildmodell, Conditioning, VAE, `UPSCALE_MODEL` und Ultimate SD Upscale. Bildläufe sind für MOSS-Image und lokal für Anima belegt. Für Faktor-16-VAEs werden externe `reference_latents` abgewiesen. Die optionale interne Referenz ist standardmäßig aus. |
 | Pixel Anchored Remaster | Benötigt ein passendes Bildmodell, Conditioning und VAE. Verwendet gekacheltes VAE-Encoding/-Decoding und Core-Sampling. Faktor 8 und 16 wurden auf CPU geprüft, ein MOSS-Image-GPU-Lauf ist dokumentiert. Die optionale Referenz ist standardmäßig an. |
 | UNet Block Noise Patch, DiT Block Noise | Verlangen die jeweilige Modellarchitektur. Die Übersicht enthält die unterstützten Modellfamilien und Beispiele. [Block Noise nach Modellarchitektur](../README.md#block-noise-nach-modellarchitektur) |
+| Model Weight Randomize | Greift über den Core-ModelPatcher auf Gewichtsmatrizen und Faltungskernel des Diffusionsmodells zu. Wählbare Blockgruppen gibt es für Core-UNets (etwa Pony XL und SDXL) sowie für Anima und MOSS-Image. |
 
 Der CPU-Test mit dem Core bestätigte das Raster von `auto` für SD 1.5, SD 2.x, SDXL, SD3, AuraFlow, Anima, MOSS-Image, FLUX.1/2/3, Krea 2, Qwen-Image und Z-Image. Für Anima, Krea 2 und Qwen-Image wurde dabei die Form `B,C,1,H,W` erzeugt. [Latent-Implementierung](../nodes/empty_latent_aspect_ratio.py)
 
@@ -118,10 +120,15 @@ Beide T5/Qwen-Balancer erhalten bei MOSS (`MOSSImageTokenizer`, Stream `qwen35_9
 | Node-ID | Anzeigename | Ausgänge |
 |---|---|---|
 | `OnekoConditioningAdjust` | [Conditioning Adjust (Oneko)](../nodes/conditioning_tools.py) | `CONDITIONING, STRING` |
+| `OnekoConditioningTokenRandomize` | [Conditioning Token Randomize (Oneko)](../nodes/conditioning_token_randomize.py) | `CONDITIONING` |
 
 Conditioning Adjust bearbeitet bereits erzeugte Textvektoren. Das zusätzliche Profil `moss_image` schützt die vom Oneko-Encoder markierten Rollen-, Thinking- und Sondertokenpositionen; `auto` erkennt MOSS anhand dieser Herkunftsinformation, nicht anhand der Kanalzahl. CLIP Sculpt, beide Balancer und beide Regional-Encoder erfassen die Nutzertoken vor einer möglichen Sculpt-Bearbeitung. Die vier aktiven Presets wirken nur auf Nutzertextpositionen; `soft_balance` glättet nicht über geschützte Lücken. `preserve_magnitude` erhält bei MOSS die RMS pro Bild ausschließlich über diese Positionen. `neutral_report_only`, ausgeschaltetes `enabled` oder Stärke 0 bleiben exakt neutral.
 
 Die Masken sind an den jeweiligen Encoding-Tensor gebunden; nachträgliche Vektormischungen/Umordnungen werden auch bei gleicher Sequenzlänge erkannt. Adjust vor solchen Änderungen einsetzen; direkt verkettete Adjust-Nodes erneuern ihre Bindung. Native Core-Encoder liefern diese Zusatzinformationen nicht. Unmarkiertes `auto` behält die bisherige Breitenheuristik mit Warnung bei; explizites MOSS ohne gültige Maske meldet einen Fehler. Die bestehende generische Skalierung dient als zurückhaltender Ausgangspunkt des MOSS-Profils, nicht als belegtes Qualitätsoptimum. [Alle Presets und MOSS-Vorlage](../examples/README.md#moss-conditioning-adjust).
+
+Conditioning Token Randomize sitzt nach dem Textencoder. Bei `strength=0` gibt er das Original aus. Bei `1` ersetzt er jede ausgewählte Zeile durch einen Zufallsvektor mit derselben Länge. Dazwischen mischt er beide Vektoren linear. `start_token` zählt ab null in der kodierten Sequenz. `token_count=0` wählt bis zum Sequenzende. Der Node übernimmt Zusatzdaten wie `pooled_output`. Bei Anima gibt er auch die separaten T5-Adapter-IDs und -Gewichte weiter. [SDXL-Vergleichsworkflow](../examples/oneko_conditioning_token_randomize.json)
+
+Bei MOSS-Image liefert `CLIP Sculpt Text Encode` mit Intensität `0` und Normalisierung `none` die überprüfbare Maske für den Nutzertext. Der Randomizer bearbeitet die Schnittmenge aus Maske und gewähltem Bereich. Rollen-, Thinking- und Sondertoken bleiben erhalten. Nach einer Änderung bindet er die Maske an den neuen Tensor, sodass Conditioning Adjust sie weiter nutzen kann. Bei einer ungültigen Markierung gibt der Node das Original aus und meldet den Grund im Log. Unmarkiertes Conditioning verwendet die normale Positionsauswahl. [MOSS-Beispiel](../examples/oneko_moss_randomize.json) · [Anima-Beispiel](../examples/oneko_anima_randomize.json)
 
 ## Oneko/04 Regional/Apply
 
@@ -262,6 +269,13 @@ Schreibt neue Lieder oder überarbeitet Ausgangstexte und erzeugt dabei den pass
 |---|---|---|
 | `OnekoDiTBlockNoisePatch` | [DiT Block Noise (Oneko)](../nodes/dit_block_noise_patch.py) | `MODEL` |
 | `OnekoUNetBlockNoisePatch` | [UNet Block Noise Patch (Oneko)](../nodes/unet_block_noise_patch.py) | `MODEL` |
+| `OnekoModelWeightRandomize` | [Model Weight Randomize (Oneko)](../nodes/model_weight_randomize.py) | `MODEL` |
+
+Model Weight Randomize sitzt im `MODEL`-Pfad vor dem Sampler. Bei `strength=0` gibt er das Eingabemodell aus. Bei `1` ersetzt der ModelPatcher die unterstützten mindestens zweidimensionalen `weight`-Tensoren durch Zufallstensoren derselben L2-Norm. Dazwischen mischt er linear. Die Zufallsrichtung hängt pro Tensor von seinem Namen und `seed` ab. ComfyUI berechnet die Mischung, wenn die Gewichte gebraucht werden. Der Eingriff betrifft den MODEL-Zweig für die Inferenz. Der Vergleichsworkflow berechnet die Sigma-Folge am Loader-Modell und verwendet sie über alle `strength`-Werte hinweg. Für den Vergleich beide Seeds und die Lade- und Gerätekonfiguration festhalten. [Pony-Vergleichsworkflow](../examples/oneko_model_weight_randomize.json)
+
+`block_group` beschränkt den Eingriff bei UNet-Modellen auf `input_blocks`, `middle_block` oder `output_blocks`. Mit `all` verwenden auch bestehende Workflows sämtliche unterstützten Gewichte. Der [Blockvergleich bei Stärke 0,040](../examples/oneko_model_weight_block_comparison.json) führt die drei Gruppen mit demselben Prompt, denselben Seeds und derselben Sigma-Folge aus. Jede Ausgabe trägt den Namen ihrer Blockgruppe.
+
+Bei Anima und MOSS-Image wählen `early_dit_blocks`, `middle_dit_blocks` und `late_dit_blocks` je ein Drittel des Haupt-Transformers in Ausführungsreihenfolge. Die Grenzen folgen der Blockzahl des geladenen Modells. Der Anima-LLM-Adapter und der MOSS-Text-Embedder liegen außerhalb dieser Gruppen. In den beiden Beispielworkflows steht die Gruppe auf `late_dit_blocks`. Beide Stärken starten bei null, damit sich jeweils ein Eingriff mit derselben Referenz vergleichen lässt. [Anima](../examples/oneko_anima_randomize.json) · [MOSS-Image](../examples/oneko_moss_randomize.json)
 
 UNet Block Noise prüft das tatsächliche Diffusionsmodell und unterstützt Core `UNetModel`, etwa SD1/SD2/SDXL. MOSS/DiT werden von der UNet-Node vor dem Setzen der Hooks mit einem klaren Fehler abgewiesen.
 

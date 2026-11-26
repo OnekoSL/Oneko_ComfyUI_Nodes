@@ -1,5 +1,21 @@
 # Beispiele
 
+## Conditioning und Modellgewichte randomisieren
+
+Alle fünf Vorlagen verwenden feste Seeds. Modellnamen durch lokal installierte Dateien ersetzen; die Beispiele laden keine Modelle herunter.
+
+| Vorlage | Vergleich |
+|---|---|
+| [Conditioning Token Randomize](oneko_conditioning_token_randomize.json) | Tokenvektoren nach dem Textencoder verändern |
+| [Model Weight Randomize](oneko_model_weight_randomize.json) | Gewichte im MODEL-Zweig mit einer festen Sigma-Folge verändern |
+| [UNet-Blockvergleich](oneko_model_weight_block_comparison.json) | Eingangsblöcke, Mittelblock und Ausgangsblöcke bei 0,040 mit gleichem Prompt und Seeds |
+| [Anima](oneko_anima_randomize.json) | Beide Nodes mit Qwen-Conditioning und später DiT-Blockgruppe |
+| [MOSS-Image](oneko_moss_randomize.json) | Beide Nodes mit geschütztem Oneko-Conditioning und später DiT-Blockgruppe |
+
+Einzelne Randomizer starten mit Stärke 0, der UNet-Blockvergleich mit 0,040. Für eine Stärke-Serie nur einen Regler ändern und sowohl Randomizer- als auch Sampling-Seed auf `fixed` belassen. `early_dit_blocks`, `middle_dit_blocks` und `late_dit_blocks` teilen den Haupt-Transformer von Anima/MOSS in Drittel; die UNet-Gruppen gehören zu SD1/SD2/SDXL und deren Finetunes.
+
+Die MOSS-Vorlage verwendet **CLIP Sculpt Text Encode** mit Intensität 0 und Normalisierung `none`. Damit erhält Token Randomize eine überprüfbare Nutzertextmaske und lässt Chat-, Thinking- und Sondertoken unverändert. Unmarkiertes Conditioning verwendet dagegen die normale Positionsauswahl. [Regler und Grenzen](../docs/NODE_KATALOG.md#oneko03-conditioningtransform).
+
 ## Ollama Hero Portrait
 
 [`oneko_ollama_hero_portrait.json`](oneko_ollama_hero_portrait.json) enthält **Ollama Hero Portrait (Oneko)** und vier Core-`PreviewAny`-Nodes. Der frei erfundene Beispielheld steht direkt im Textfeld; die Vorlage erzeugt nur Texte und benötigt ein bereits installiertes Ollama-Textmodell. Nach der Installation ComfyUI neu starten, die Browserseite neu laden und `ollama_model` auswählen.

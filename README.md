@@ -1,6 +1,6 @@
 # Oneko ComfyUI Nodes
 
-Eine kuratierte Sammlung von **46 Nodes im aktuellen Entwicklungsstand** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.2.1** behebt die globalen USDU-/Preview-Eingriffe und stellt die damalige Node-Anzahl klar. Enthalten sind weiterhin der modulare Audio Timeline Mixer, Ollama Verse Maker, Empty Latent Aspect Ratio sowie MOSS-Unterstützung. Experimentelles DiT Block Noise ist für Anima, AuraFlow und MOSS-Image verfügbar. Neu im Entwicklungsstand: **Ollama Hero Portrait** für Helden-XML/Text, Pose, Hintergrund und wählbare Porträtausschnitte ([Beispiel und Bedienung](examples/README.md#ollama-hero-portrait)). [Änderungen in 0.2.1](CHANGELOG.md#021--2026-11-15).
+Eine kuratierte Sammlung von **48 Nodes** für Bildgenerierung, Prompts, regionale Konditionierung, Sampling, Upscaling, Wan-Video und Audio. Version **0.3.0** ergänzt **Conditioning Token Randomize**, **Model Weight Randomize** und **Ollama Hero Portrait**. Die Randomizer unterstützen reproduzierbare Vergleiche mit festen Seeds, einschließlich Anima und MOSS-Image. Hinzu kommen dosierbare Noise-Profile, späte Detailkorrektur und DiT Block Noise für Anima und AuraFlow. [Änderungen in 0.3.0](CHANGELOG.md#030--2026-11-26) · [Randomizer-Beispiele](examples/README.md#conditioning-und-modellgewichte-randomisieren) · [Heldenporträts](examples/README.md#ollama-hero-portrait).
 
 Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung. Registrierung, Anzeigenamen, Menüs, Frontend-Erweiterungen und Ollama-Route verwenden Oneko. Das Paket enthält seine Implementierungen selbst und importiert das alte Nukun-Paket nicht.
 
@@ -10,13 +10,13 @@ Oneko basiert auf einer ausgewählten Teilmenge der bisherigen eigenen Sammlung.
 |---|---:|---|
 | Loader | 2 | Checkpoint-Cycler und Diffusion/CLIP/VAE-Cycler |
 | Text und Ollama | 7 | Vokabular, MiniMax-H3-Promptaufbau, Heldenporträts, Bild-/Videoprompts und Captioning |
-| Conditioning | 5 | CLIP Sculpt, T5/Qwen-Ausgleich, Diagnose und Anpassung |
+| Conditioning | 6 | CLIP Sculpt, T5/Qwen-Ausgleich, Diagnose, Anpassung und Token Randomize |
 | Regionen | 6 | Split-/Rechteckmasken, Prompt-Encoding und natives Conditioning |
 | Sampling | 5 | Universal KSampler, zwei Guider-Varianten, Noise Profile Cycler und Empty Latent Aspect Ratio |
 | Bilder und Upscaling | 3 | Rekursiver Loader, USDU HiResFix, Pixel Anchored Remaster |
 | Wan 2.2 Video | 9 | Einstellungen, TI2V-Latent, Fortsetzung, Manifeste, Segmente und Zusammenbau |
 | Audio | 6 | Ollama Verse Maker, ACE Song Director, Timeline Conditioning, Fünfspur-Mixer und modularer Mixer mit gebündelten Spuren und eingebauten Masterreglern |
-| Model Patch / Hilfsmittel | 3 | UNet Block Noise Patch, DiT Block Noise, Integer-/String-Zähler |
+| Model Patch / Hilfsmittel | 4 | UNet Block Noise Patch, DiT Block Noise, Model Weight Randomize, Integer-/String-Zähler |
 
 Der Ollama Prompt Refiner unterstützt nun zusätzlich `moss_image`: natürliche Beschreibungen ohne festes Wortbudget, räumliche Vorgaben und geschützte Bildbeschriftungen. [MOSS-Textvorlage](examples/oneko_moss_prompt_refiner.json) · [Bedienung und Fallback-Grenzen](examples/README.md#moss-ollama-prompt-refiner).
 
@@ -68,7 +68,7 @@ Modelle, LoRAs, Ausgaben und eigene Workflows gehören in die ComfyUI-Verzeichni
 
 ## Verbesserungen gegenüber dem Ausgangspaket
 
-- Aus den 58 Nodes des Ausgangspakets wurden für Version 0.1.0 zunächst 40 übernommen. Mit fünf neuen Nodes umfasst Oneko seit Version 0.2.0 insgesamt **45 Nodes**; doppelte Preset-Wrapper und ältere Integrationspfade entfallen.
+- Aus den 58 Nodes des Ausgangspakets wurden für Version 0.1.0 zunächst 40 übernommen. Version 0.2.0 enthielt 45 Nodes; Version 0.3.0 erweitert die Sammlung auf **48 Nodes**. Doppelte Preset-Wrapper und ältere Integrationspfade entfallen.
 - Nach Arbeitsschritten sortierte Menüs und einheitliche Oneko-Kennungen einschließlich JavaScript/CSS und Ollama-Route.
 - Der rekursive Bildloader filtert Nichtbilder aus und übernimmt ComfyUIs Decoder, einschließlich Mehrbildformaten.
 - Ungültige Noise-Profile werden klar zurückgewiesen, statt still Gaussian Noise zu verwenden.

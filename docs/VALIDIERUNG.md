@@ -1,5 +1,13 @@
 # Validierungsstand
 
+## Release 0.3.0 — 26.11.2026
+
+**1.508 Python-Tests und 66 Untertests bestanden, 2 Tests übersprungen, 20,12 s.** Aufruf mit der vorhandenen ComfyUI-Python-Umgebung: `python -s -B tools/run_tests.py -q -p no:cacheprovider`. **73 JavaScript-Tests bestanden** mit `node --test tests/*.mjs`. Umgebung: ComfyUI 0.46.0, Python 3.12.10, PyTorch 2.11.0+cu130. Die Python-Suite verwendet den Core auf CPU und prüft unter anderem Registrierung und V3-Schemas der insgesamt 48 Nodes. Für diese Releaseprüfung wurden keine Modelle heruntergeladen und keine neuen GPU- oder Ollama-Generierungen gestartet.
+
+Die Randomizer-Tests prüfen den exakt neutralen Zustand bei Stärke 0, deterministische Seeds ohne Veränderung des globalen RNG, lineare Mischung, Tokenbereiche, unveränderte Eingaben und Metadaten. Native ModelPatcher-Prüfungen decken Laden/Entfernen der Patches, Low-VRAM-Prefetch, FP8-Requantisierung sowie die UNet-/Anima-/MOSS-Blockauswahl ab. MOSS-Kontexttests sichern geschützte Tokenpositionen, Fingerprint-Erneuerung und den Bypass bei ungültiger Herkunft; Anima-Tests erhalten die separaten T5-Adapterdaten. Die fünf neuen Beispielworkflows haben konsistente Verbindungen und feste Vergleichsseeds.
+
+Während der Entwicklung wurden mit vorhandenem Pony XL Referenz und alle drei UNet-Blockgruppen bei Stärke 0,040 mit derselben Sigma-Folge auf GPU verglichen. Für AnimaBreeze und Hooch MOSS bestanden zusätzlich kleine aktive Funktionsläufe mit beiden Randomizern: 256 × 384, drei Schritte, Gewichtsstärke 0,04 und Tokenstärke 0,10, einschließlich Sampling und VAE-Decoding. Diese Läufe belegen Funktionsfähigkeit für die geprüften Modelle, keine allgemeine Bildqualitätsgarantie. Persönliche Bilder und Prüfartefakte bleiben außerhalb des Repositories. Die Vergleichsworkflows halten die Sigma-Folge am unveränderten Ausgangsmodell fest; bei eigenen Vergleichen zusätzlich Lade-/Gerätekonfiguration und beide Seeds konstant halten.
+
 ## Heldenporträt: Apostrophe und numerische Fakten — 17.11.2026
 
 Der gemeldete Abbruch bei einem Dateinamen mit Apostrophen stammt laut Ausführungshistorie aus der Prüfung fehlender Zahlenangaben in `identity`, nicht vom Dateizugriff. Die Originaldatei wird unverändert gelesen. Numerisches Alter ist nun ein separater kanonischer Baustein; numerische Größe und Gewicht erhalten ebenfalls feste Formulierungen. Vor der Zahlenprüfung werden vorhandene kanonische Übersetzungen lokal eingesetzt, wie bereits bei der endgültigen Promptzusammensetzung. Nichtleere Textwerte und vollständige Antwortstruktur bleiben Pflicht.
